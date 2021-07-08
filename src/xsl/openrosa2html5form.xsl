@@ -378,7 +378,11 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
             </xsl:if>
         </xsl:variable>
         <xsl:if test="@appearance">
+            <!-- NOT tested -->
             <xsl:variable name="appearances" select="str:tokenize(@appearance)" />
+            <!-- /NOT tested -->
+
+            <!-- NOT tested -->
             <xsl:for-each select="exsl:node-set($appearances)">
                 <xsl:variable name="appearance">
                     <xsl:value-of select="normalize-space(translate(., $upper-case, $lower-case))"/>
@@ -400,6 +404,8 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                     </xsl:if>
                 </xsl:if>
             </xsl:for-each>
+            <!-- /NOT tested -->
+
         </xsl:if>
         <!-- turn rows attribute into an appearance (which is what it should have been in the first place imho)-->
         <xsl:if test="./@rows">
@@ -628,14 +634,19 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
             <!-- better to use default language if defined and otherwise span[1] -->
             <xsl:choose>
                 <!-- TODO: IT WOULD BE MORE EFFICIENT TO EXTRACT THIS FROM exsl:node-set($label_translations) -->
+
+                <!-- NOT tested -->
                 <xsl:when test="exsl:node-set($label_translations)/span[@lang=$current-lang]">
                     <xsl:value-of select="exsl:node-set($label_translations)/span[@lang=$current-lang] " />
                 </xsl:when>
                 <xsl:otherwise>
                     <xsl:value-of select="exsl:node-set($label_translations)/span[1] " />
                 </xsl:otherwise>
+                <!-- /NOT tested -->
             </xsl:choose>
         </option>
+
+        <!-- NOT tested -->
         <xsl:for-each select="exsl:node-set($label_translations)/span" >
             <span>
                 <xsl:attribute name="data-option-value">
@@ -647,6 +658,8 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                 <xsl:value-of select="."/>
             </span>
         </xsl:for-each>
+        <!-- /NOT tested -->
+
     </xsl:template>
 
     <xsl:template match="xf:itemset" mode="templates">
@@ -705,7 +718,11 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                 </xsl:otherwise>
             </xsl:choose>
         </xsl:variable>
+
+        <!-- Tested! -->
         <xsl:variable name="instance-path" select="str:replace($instance-path-temp, '/', '/xf:')" />
+        <!-- /Tested! -->
+
         <xsl:variable name="instance-path-nofilter">
             <xsl:call-template name="strip-filter">
                 <xsl:with-param name="string" select="$instance-path"/>
@@ -726,6 +743,8 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                     <xsl:attribute name="data-label-ref">
                         <xsl:value-of select="$label-node-name"/>
                     </xsl:attribute>
+
+                    <!-- NOT tested: `<xsl:with-param name="class" select="'option-label'"/>` -->
                     <xsl:for-each select="dyn:evaluate(concat('/h:html/h:head/xf:model/xf:instance[@id=&quot;', $instance-id, '&quot;]', $instance-path-nofilter))">
                         <!-- so this is support for itext(node) (not itext(path/to/node)), but only 'ad-hoc' for itemset labels for now -->
                         <xsl:variable name="id" select="./*[name()=$label-node-name]" />
@@ -734,6 +753,8 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                             <xsl:with-param name="class" select="'option-label'"/>
                         </xsl:call-template>
                     </xsl:for-each>
+                    <!-- /NOT tested -->
+
                 </xsl:when>
                 <xsl:otherwise>
                     <xsl:attribute name="data-label-ref">
@@ -873,9 +894,13 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                 <xsl:choose>
                     <xsl:when test="not(./xf:itemset)">
                         <option value="">...</option>
+
+                        <!-- NOT tested -->
                         <xsl:for-each select="exsl:node-set($options)/option">
                             <xsl:copy-of select="."/>
                         </xsl:for-each>
+                        <!-- /NOT tested -->
+
                     </xsl:when>
                     <xsl:otherwise>
                         <!--<xsl:attribute name="data-itemset"/>-->
@@ -885,9 +910,13 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
             </xsl:element>
             <span class="or-option-translations" style="display:none;">
                 <xsl:if test="not(./xf:itemset) and $translated = 'true'">
+
+                    <!-- NOT tested -->
                     <xsl:for-each select="exsl:node-set($options)/span">
                         <xsl:copy-of select="." />
                     </xsl:for-each>
+                    <!-- /NOT tested -->
+
                 </xsl:if>
                 <xsl:text>
                 </xsl:text>
