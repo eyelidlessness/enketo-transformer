@@ -1,6 +1,7 @@
 import { resolve } from 'path';
 import { defineConfig } from 'vitest/config';
-import { baseConfig } from './config/build.shared';
+import { baseConfig, external } from './config/build.shared';
+import { VitestGithubActionsReporter } from './tools/reporters/vitest/github-actions';
 
 export default defineConfig({
     ...baseConfig,
@@ -14,8 +15,20 @@ export default defineConfig({
         },
         minify: false,
         outDir: 'dist',
+        rollupOptions: {
+            external,
+            output: {
+                // This suppresses a warning for modules with both named and
+                // default exporrs when building for CommonJS (UMD in our
+                // current build). It's safe to suppress this warning because we
+                // have explicit tests ensuring both the default and named
+                // exports are consistent with the existing public API.
+                exports: 'named',
+            },
+        },
         sourcemap: true,
     },
+    mode: 'bench',
     optimizeDeps: {
         disabled: true,
     },
@@ -31,16 +44,14 @@ export default defineConfig({
         // functionality which depends on libxmljs/libxslt.
         threads: false,
 
-        coverage: {
-            provider: 'istanbul',
-            include: ['src/**/*.ts'],
-            reporter: ['html', 'text-summary', 'json'],
-            reportsDirectory: './test-coverage',
+        benchmark: {
+            include: ['test/benchmarks.ts'],
+            reporters: ['default', new VitestGithubActionsReporter()],
         },
-
+        include: [],
+        isolate: true,
         globals: true,
-        include: ['test/**/*.spec.ts'],
-        reporters: 'verbose',
+        passWithNoTests: true,
         sequence: { shuffle: false },
     },
 });
