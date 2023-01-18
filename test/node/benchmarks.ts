@@ -1,6 +1,6 @@
 import { basename } from 'path';
-import { transform } from 'src/transformer';
 import { bench } from 'vitest';
+import { transform } from '../../src/node';
 
 const xforms = await Promise.all(
     Object.entries(

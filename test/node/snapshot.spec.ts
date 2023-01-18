@@ -1,3 +1,10 @@
+/* eslint-disable @typescript-eslint/triple-slash-reference */
+/// <reference no-default-lib="true" />
+/// <reference types="vitest/globals" />
+/// <reference types="vite/types/importMeta" />
+/// <reference path="../../typings/prettier.d.ts" />
+/// <reference path="../../typings/@prettier/plugin-xml.d.ts" />
+
 /**
  * The intent of this test suite is to identify (as a strong best effort) when
  * changes we make introduce unintential changes to transformed output. There
@@ -7,19 +14,34 @@
  */
 
 import { basename } from 'path';
+import { DOMParser } from 'linkedom';
+import type { Attr as BaseAttr } from 'linkedom/types/interface/attr';
+import type { Element as BaseElement } from 'linkedom/types/interface/element';
 import prettier from 'prettier';
 import { format as prettyFormat } from 'pretty-format';
 import type { Options as PrettierOptions } from 'prettier';
 import prettierPluginXML from '@prettier/plugin-xml';
-import { NAMESPACES, transform } from '../src/transformer';
-import type { TransformedSurvey } from '../src/transformer';
-import {
-    getTransformedForm,
-    parser,
-    serializer,
-    DOMMimeType,
-    Element,
-} from './shared';
+import { NAMESPACES } from '../../src/transformer';
+import { transform } from '../../src/node';
+import type { TransformedSurvey } from '../../src/transformer';
+import { DOMMimeType, formImporters, getTransformedWebForm } from '../shared';
+
+export const parser = new DOMParser();
+
+declare module 'linkedom/types/interface/node' {
+    interface Node {
+        cloneNode<T>(this: T, deep: boolean): T;
+        cloneNode<T>(this: T): T;
+    }
+}
+
+interface Attr extends BaseAttr {
+    namespaceURI: string;
+}
+
+interface Element extends BaseElement {
+    attributes: Attr[];
+}
 
 describe('Snapshots', () => {
     /**
@@ -96,7 +118,7 @@ describe('Snapshots', () => {
 
         normalizeAttributes(documentElement, mimeType);
 
-        const serialized = serializer.serializeToString(document);
+        const serialized = document.toString();
         const basePrettierOptions: PrettierOptions = {
             bracketSameLine: true,
             printWidth: 80,
@@ -207,15 +229,13 @@ describe('Snapshots', () => {
         });
     });
 
-    const forms = import.meta.glob('./**/*.xml');
-
     interface Fixture {
         fileName: string;
         formPath: string;
         origin: string;
     }
 
-    const fixtures = Object.keys(forms)
+    const fixtures = Object.keys(formImporters)
         .map((formPath) => ({
             fileName: basename(formPath),
             formPath,
@@ -235,19 +255,18 @@ describe('Snapshots', () => {
             group.push(fixture);
 
             return acc;
-        }, new Map<string, Fixture[]>())
-        .entries();
+        }, new Map<string, Fixture[]>());
 
     describe.each([...fixtures])('%s', (_origin, cases) => {
         describe.each(cases)('$fileName', ({ fileName, formPath }) => {
             it(`transforms ${fileName} consistently with no options`, async () => {
-                const result = await getTransformedForm(formPath);
+                const result = await getTransformedWebForm(formPath);
 
                 expect(result).toMatchSnapshot();
             });
 
             it(`transforms ${fileName} consistently with markdown: false`, async () => {
-                const result = await getTransformedForm(formPath, {
+                const result = await getTransformedWebForm(formPath, {
                     markdown: false,
                 });
 
@@ -255,7 +274,7 @@ describe('Snapshots', () => {
             });
 
             it(`transforms ${fileName} consistently with markdown: true`, async () => {
-                const result = await getTransformedForm(formPath, {
+                const result = await getTransformedWebForm(formPath, {
                     markdown: true,
                 });
 
@@ -263,7 +282,7 @@ describe('Snapshots', () => {
             });
 
             it(`transforms ${fileName} consistently with media`, async () => {
-                const result = await getTransformedForm(formPath, {
+                const result = await getTransformedWebForm(formPath, {
                     media: {
                         'jr://audio/a song.mp3': 'transformed:audio/a song.mp3',
                         'jr://audio/a%20song.mp3':
@@ -322,7 +341,7 @@ describe('Snapshots', () => {
             });
 
             it(`transforms ${fileName} consistently with openclinica: 0`, async () => {
-                const result = await getTransformedForm(formPath, {
+                const result = await getTransformedWebForm(formPath, {
                     openclinica: 0,
                 });
 
@@ -330,7 +349,7 @@ describe('Snapshots', () => {
             });
 
             it(`transforms ${fileName} consistently with openclinica: 1`, async () => {
-                const result = await getTransformedForm(formPath, {
+                const result = await getTransformedWebForm(formPath, {
                     openclinica: 1,
                 });
 
@@ -338,7 +357,7 @@ describe('Snapshots', () => {
             });
 
             it(`transforms ${fileName} consistently with openclinica: false`, async () => {
-                const result = await getTransformedForm(formPath, {
+                const result = await getTransformedWebForm(formPath, {
                     openclinica: false,
                 });
 
@@ -346,7 +365,7 @@ describe('Snapshots', () => {
             });
 
             it(`transforms ${fileName} consistently with openclinica: true`, async () => {
-                const result = await getTransformedForm(formPath, {
+                const result = await getTransformedWebForm(formPath, {
                     openclinica: true,
                 });
 
@@ -354,7 +373,7 @@ describe('Snapshots', () => {
             });
 
             it(`transforms ${fileName} consistently with openclinica: null`, async () => {
-                const result = await getTransformedForm(formPath, {
+                const result = await getTransformedWebForm(formPath, {
                     // @ts-expect-error: this was never part of the type contract, but it's checked in the implementation and shouldn't regress
                     openclinica: null,
                 });
@@ -363,7 +382,7 @@ describe('Snapshots', () => {
             });
 
             it(`transforms ${fileName} consistently with a preprocess function`, async () => {
-                const result = await getTransformedForm(formPath, {
+                const result = await getTransformedWebForm(formPath, {
                     preprocess: (document) => {
                         const body = document.get('/h:html/h:body', NAMESPACES);
 
@@ -377,7 +396,7 @@ describe('Snapshots', () => {
             });
 
             it(`transforms ${fileName} consistently with a preprocess method referencing libxmljs as the 'this' variable`, async () => {
-                const result = await getTransformedForm(formPath, {
+                const result = await getTransformedWebForm(formPath, {
                     preprocess(document) {
                         const model = document.get(
                             '/h:html/h:head/xmlns:model',
@@ -399,7 +418,7 @@ describe('Snapshots', () => {
             });
 
             it(`transforms ${fileName} consistently with a theme`, async () => {
-                const result = await getTransformedForm(formPath, {
+                const result = await getTransformedWebForm(formPath, {
                     theme: 'mytheme',
                 });
 

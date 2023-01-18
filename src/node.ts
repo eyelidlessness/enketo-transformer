@@ -1,3 +1,8 @@
+/* eslint-disable @typescript-eslint/triple-slash-reference */
+/// <reference path="../typings/libxmljs.d.ts" />
+
+import type libxmljs from 'libxmljs';
+import type { Document as XMLJSDocument } from 'libxmljs';
 import { firefox as headless } from 'playwright';
 import type { Page } from 'playwright';
 import { createServer } from 'vite';
@@ -8,6 +13,7 @@ import {
     rootDir,
 } from '../config/build.shared';
 import '../index.html?raw';
+import type { Survey as BaseSurvey, TransformedSurvey } from './transformer';
 
 /**
  * @private
@@ -104,44 +110,92 @@ const getPage = async () => {
 
 pagePromise = getPage();
 
+type LibXMLJS = typeof libxmljs;
+
+export type PreprocessFunction = (
+    this: LibXMLJS,
+    doc: XMLJSDocument
+) => XMLJSDocument;
+
+const legacyPreprocess = async (
+    xform: string,
+    preprocess: PreprocessFunction
+) => {
+    let libxmljs: LibXMLJS | null = null;
+
+    try {
+        libxmljs = await import('node1-libxmljsmt-myh');
+    } catch {
+        try {
+            libxmljs = await import('libxmljs');
+        } catch {
+            throw new Error(
+                'You must install `libxmljs` to use the `preprocess` option.'
+            );
+        }
+    }
+
+    const doc = libxmljs.parseXml(xform);
+    const preprocessed = preprocess.call(libxmljs, doc);
+
+    return preprocessed.toString(false);
+};
+
+export interface Survey extends Omit<BaseSurvey, 'preprocess'> {
+    preprocess?: PreprocessFunction;
+}
+
 declare const enketo: {
     transformer: {
-        transform: (survey: any) => Promise<any>;
+        transform: (survey: Survey) => Promise<TransformedSurvey>;
     };
 };
 
-export const transform = async (survey: any) => {
+export const transform = async (survey: Survey) => {
+    const {
+        preprocess,
+        preprocessXForm,
+        xform: baseXForm,
+        ...options
+    } = survey;
+
+    let xform = baseXForm;
+
+    if (typeof preprocess === 'function') {
+        xform = await legacyPreprocess(xform, preprocess);
+    }
+
     const page = await getPage();
 
-    const [error, result] = await page.evaluate(
+    const result = await page.evaluate(
         /* eslint-disable @typescript-eslint/no-shadow */
-        async ([input]) => {
-            let transformed: any = null;
-            let caught: any = null;
+        async ([input, preprocess]) => {
+            const preprocessXForm =
+                typeof preprocess === 'string'
+                    ? (new Function(preprocess) as (xform: string) => any) // eslint-disable-line
+                    : undefined;
 
-            try {
-                transformed = await enketo.transformer.transform(input);
-            } catch (error) {
-                const { message, stack } = error as Error;
+            const browserResult = await enketo.transformer.transform({
+                ...input,
+                preprocessXForm,
+            });
 
-                caught = {
-                    message,
-                    stack,
-                };
-
-                console.log('caught', caught);
-            }
-
-            return [caught, transformed];
+            return browserResult;
         },
         /* eslint-enable @typescript-eslint/no-shadow */
 
-        [survey] as const
+        [
+            {
+                ...options,
+                xform,
+            },
+            typeof preprocessXForm === 'function'
+                ? String(preprocessXForm)
+                : null,
+        ] as const
     );
 
-    if (error == null) {
-        return result;
-    }
-
-    throw Object.assign(new Error(error.message), error);
+    return result;
 };
+
+export type { TransformedSurvey } from './transformer';
