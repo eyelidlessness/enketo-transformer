@@ -11,3 +11,7 @@ setGlobal('enketo', {
         transform,
     },
 });
+
+if (ENV === 'web') {
+    import('./demo');
+}

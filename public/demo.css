@@ -1,0 +1,39 @@
+html,
+body,
+input,
+select,
+textarea {
+    font: 16px sans-serif;
+}
+
+h1 a {
+    color: #059;
+    text-decoration: none;
+}
+
+form.or .question {
+    display: block;
+    margin: 1em 0;
+}
+
+[lang].active {
+    display: unset;
+}
+
+#transform-options label.text {
+    display: inline-block;
+    margin-left: 2rem;
+}
+
+form.or.theme-mytheme #form-title {
+    color: #00f;
+}
+
+form.or .form-logo:empty::before {
+    content: 'Logo';
+    text-decoration: line-through;
+}
+
+form.or .form-logo:not(:empty)::before {
+    content: 'Logo: ';
+}
