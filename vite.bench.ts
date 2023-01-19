@@ -45,7 +45,7 @@ export default defineConfig({
         threads: false,
 
         benchmark: {
-            include: ['test/benchmarks.ts'],
+            include: ['test/node/benchmarks.ts'],
             reporters: ['default', new VitestGithubActionsReporter()],
         },
         include: [],

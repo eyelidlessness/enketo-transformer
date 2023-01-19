@@ -4,7 +4,7 @@ import { transform } from '../../src/node';
 
 const xforms = await Promise.all(
     Object.entries(
-        import.meta.glob('./**/*.xml', {
+        import.meta.glob('../**/*.xml', {
             as: 'raw',
             eager: false,
         })

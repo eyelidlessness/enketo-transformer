@@ -22,6 +22,7 @@ export default {
         exclude: ['./src/node.ts'],
         include: ['./src/**/*.ts'],
         report: true,
+        reporters: ['html', 'json'],
         reportDir: './test-coverage',
     },
     nodeResolve: true,

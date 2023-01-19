@@ -29,13 +29,15 @@
     },
     "contributors": [],
     "scripts": {
+        "benchmarks": "vitest bench --config ./vite.bench.ts --run",
+        "benchmarks:watch": "vitest bench --config ./vite.bench.ts",
         "build": "npm run tsc && vite build && npm run typedefs",
         "start": "vite",
         "start:web": "vite --config vite.web.ts",
         "eslint-check": "eslint app.ts src/**/*.ts vite.config.ts test/**/*.ts",
         "eslint-fix": "eslint app.ts src/**/*.ts vite.config.ts test/**/*.ts --fix",
         "prettier-fix": "prettier --write .",
-        "test": "wtr && vitest run --coverage && npm run prettier-fix && npm run eslint-fix && npm run tsc && node update-readme-with-shield-badge.cjs",
+        "test": "wtr && vitest run && npm run prettier-fix && npm run eslint-fix && npm run tsc && node update-readme-with-shield-badge.cjs",
         "test:server:watch": "vitest",
         "test:web:watch": "wtr --watch",
         "develop": "DEBUG=api,transformer,markdown,language node ./app.js",
@@ -62,7 +64,7 @@
         "prettier": "^2.8.1",
         "string-direction": "0.1.x",
         "undici": "^5.13.0",
-        "vite": "^4.0.3",
+        "vite": "^4.0.4",
         "vite-node": "^0.27.2",
         "vite-plugin-node": "^1.0.0",
         "xpath-to-css": "^1.1.0"
@@ -117,7 +119,7 @@
         "rimraf": "^3.0.2",
         "typescript": "^4.9.4",
         "vite-plugin-istanbul": "^4.0.0",
-        "vitest": "^0.26.2"
+        "vitest": "^0.27.2"
     },
     "volta": {
         "node": "16.5.0",
