@@ -23,6 +23,7 @@ export default {
         include: ['./src/**/*.ts'],
         report: true,
         reportDir: './test-coverage',
+        reporters: ['html', 'json'],
     },
     nodeResolve: true,
     plugins: [
@@ -34,18 +35,6 @@ export default {
 
             build: {
                 ...baseConfig.build,
-
-                rollupOptions: {
-                    ...baseConfig.build?.rollupOptions,
-
-                    external: [
-                        .../** @type {string[]} */ (
-                            baseConfig.build?.rollupOptions?.external ?? []
-                        ),
-
-                        './src/node.ts',
-                    ],
-                },
 
                 sourcemap: true,
             },

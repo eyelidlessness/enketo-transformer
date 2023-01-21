@@ -1,27 +1,18 @@
 import { parseHTML, parseXML, serializeXML } from './dom';
 import { NAMESPACES, transform } from './transformer';
+import { fixtures as baseFixtures } from '../test/shared';
 import '../public/demo.css';
 
-const formImporters = Object.entries(
-    import.meta.glob('../test/**/*.xml', {
-        as: 'raw',
-        eager: false,
-    })
-)
-    .sort(([A], [B]) => {
-        const a = A.toLowerCase().replace(/.*\/([^/]+)$/, '$1');
-        const b = B.toLowerCase().replace(/.*\/([^/]+)$/, '$1');
+const fixtures = baseFixtures.sort((A, B) => {
+    const a = A.fileName.toLowerCase().replace(/.*\/([^/]+)$/, '$1');
+    const b = B.fileName.toLowerCase().replace(/.*\/([^/]+)$/, '$1');
 
-        if (a > b) {
-            return 1;
-        }
+    if (a > b) {
+        return 1;
+    }
 
-        return b > a ? -1 : 0;
-    })
-    .map(([path, importer]) => ({
-        fileName: path.replace(/.*\/([^/]+)$/, '$1'),
-        importer,
-    }));
+    return b > a ? -1 : 0;
+});
 
 const initDemo = async () => {
     document.body.insertAdjacentHTML(
@@ -36,7 +27,7 @@ const initDemo = async () => {
                         <option value="" selected disabled>
                             Choose a form…
                         </option>
-                        ${formImporters.map(
+                        ${fixtures.map(
                             ({ fileName }, index) =>
                                 `<option value="${index}" data-file-name="${fileName}">${fileName}</option>`
                         )}
@@ -201,12 +192,13 @@ const initDemo = async () => {
         const fileName = select.querySelector<HTMLOptionElement>(
             `option[value="${CSS.escape(value)}"]`
         )?.dataset.fileName;
+        const fixture = fixtures[Number(value)];
 
-        if (fileName == null) {
+        if (fileName == null || fixture == null) {
             return;
         }
 
-        const xform = await formImporters[value as any].importer();
+        const { xform } = fixture;
 
         xformContainer.innerText = xform;
 

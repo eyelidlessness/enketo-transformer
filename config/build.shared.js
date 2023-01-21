@@ -11,19 +11,26 @@ const require = createRequire(import.meta.url);
 export const config = require('./config.json');
 
 export const external = [
+    '@actions/core',
+    '@web/**',
     'body-parser',
+    'browserslist',
     'crypto',
     'express',
     'fs',
     'libxslt',
     'libxmljs',
     'module',
+    'node:*',
     'node1-libxmljsmt-myh',
     'path',
     'playwright',
+    'perf_hooks',
+    'rollup',
     'undici',
     'url',
     'vite-node',
+    'vite-plugin-node',
     'vite',
     'vitest',
 ];
@@ -84,6 +91,9 @@ export const baseConfig = {
         minifySyntax: false,
         minifyWhitespace: false,
     },
+    // optimizeDeps: {
+    //     disabled: true,
+    // },
     server: {
         port: SERVER_PORT,
     },

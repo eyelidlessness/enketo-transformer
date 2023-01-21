@@ -1,7 +1,5 @@
-import { basename } from 'path';
 import { transform } from '../src/transformer';
 
-// import type { Survey as BridgeSurvey } from '../src/node';
 import type { Survey } from '../src/transformer';
 
 interface Fixture {
@@ -22,7 +20,7 @@ export const fixtures = await Promise.all(
         const origin =
             formPath.match(/\/external-fixtures\/([^/]+)/)?.[1] ??
             'enketo-transformer';
-        const fileName = basename(formPath);
+        const fileName = formPath.replace(/.*\/([^/]+)$/, '$1');
 
         return {
             fileName,
@@ -75,21 +73,6 @@ export const getTransformedForm = async (
     options?: GetTransformedFormOptions
 ) => {
     const xform = await getXForm(fileName);
-
-    return transform({
-        ...options,
-        xform,
-    });
-};
-
-type GetTransformedWebFormOptions = Omit<import('../src/node').Survey, 'xform'>;
-
-export const getTransformedWebForm = async (
-    fixture: string,
-    options?: GetTransformedWebFormOptions
-) => {
-    const { transform } = await import('../src/node');
-    const xform = await getXForm(fixture);
 
     return transform({
         ...options,

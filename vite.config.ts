@@ -9,11 +9,14 @@ export default defineConfig({
         ...baseConfig.build,
 
         lib: {
-            entry: resolve(__dirname, './src/transformer.ts'),
+            entry: resolve(__dirname, './src/node.ts'),
             name: 'enketo-transformer',
         },
         minify: false,
         outDir: 'dist',
+        rollupOptions: {
+            external: ['**/node_modules/**'],
+        },
         sourcemap: true,
     },
     optimizeDeps: {
@@ -31,12 +34,10 @@ export default defineConfig({
         // functionality which depends on libxmljs/libxslt.
         threads: false,
 
-        coverage: {
-            provider: 'istanbul',
-            include: ['src/**/*.ts'],
-            reporter: ['html', 'text-summary', 'json'],
-            reportsDirectory: './test-coverage',
-        },
+        // Coverage is now checked in `@web/test-runner`
+        // with the tests which originally existed before
+        // the web transition.
+        // coverage: {},
 
         globals: true,
         include: ['./test/node/**/*.spec.ts'],

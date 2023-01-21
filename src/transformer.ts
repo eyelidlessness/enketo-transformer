@@ -282,7 +282,7 @@ const transformAppearances = (doc: Document) => {
             }
 
             if (appearance === 'horizontal-compact') {
-                results.push('appearance-columns-pack');
+                results.push('or-appearance-columns-pack');
             }
 
             if (appearance === 'compact') {

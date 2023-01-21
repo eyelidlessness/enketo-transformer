@@ -1,7 +1,7 @@
 /* eslint-disable max-classes-per-file */
 import * as core from '@actions/core';
 import { performance } from 'perf_hooks';
-import { transform } from '../../src/transformer';
+import { transform } from '../../src/node';
 import { fixtures } from '../shared';
 
 const benchmarkStart = performance.now();
@@ -136,6 +136,8 @@ const sorted = results.sort((resultA, resultB) => {
 
 const [slowest] = sorted;
 const fastest = sorted[sorted.length - 1];
+
+// TODO: check for $GITHUB_STEP_SUMMARY
 
 const { summary } = core;
 

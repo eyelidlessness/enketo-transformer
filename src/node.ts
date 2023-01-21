@@ -88,7 +88,7 @@ const getPage = async () => {
 
         const content = await page.content();
 
-        await page.waitForFunction(() => enketo != null);
+        await page.waitForFunction(() => typeof enketo !== 'undefined');
 
         if (!content.includes('Enketo Transformer')) {
             console.error(

@@ -3,9 +3,9 @@
 import { beforeAll, expect, describe, it } from 'vitest';
 import { DOMParser } from 'linkedom';
 import { NAMESPACES } from '../../src/transformer';
-import { getTransformedWebForm } from '../shared';
+import xform from '../forms/bad-external.xml?raw';
 
-import type { PreprocessFunction } from '../../src/node';
+import { PreprocessFunction, transform } from '../../src/node';
 import type { TransformedSurvey } from '../../src/transformer';
 
 const parser = new DOMParser();
@@ -121,7 +121,8 @@ describe('for incompatible forms that require preprocessing', () => {
     };
 
     beforeAll(async () => {
-        preprocessed = await getTransformedWebForm('bad-external.xml', {
+        preprocessed = await transform({
+            xform,
             preprocess,
         });
         preprocessedForm = parser.parseFromString(
@@ -131,7 +132,7 @@ describe('for incompatible forms that require preprocessing', () => {
     });
 
     it('preprocess fn does nothing if not provided...', async () => {
-        const form = await getTransformedWebForm('bad-external.xml');
+        const form = await transform({ xform });
         const doc = parser.parseFromString(form.model, 'text/xml');
 
         expect(doc).to.be.an.instanceOf(XMLDocument);
