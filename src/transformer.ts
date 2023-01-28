@@ -1,4 +1,4 @@
-import { parseHTML, parseXML, serializeHTML, serializeXML } from './dom';
+import { parseXML, serializeHTML, serializeXML } from './dom';
 import { parseLanguage } from './language';
 import { markdownToHTML } from './markdown';
 import { NAMESPACES, sheets, version } from './shared';
@@ -58,7 +58,12 @@ export const transform = async <T extends Survey>(
     processBinaryDefaults(xformDoc, mediaMap);
     injectItemsetTemplateCalls(xslFormDocument, xformDoc);
 
-    const htmlDoc = xslTransform(xslFormDocument, xformDoc, xsltParams);
+    const htmlDoc = xslTransform(
+        xslFormDocument,
+        xformDoc,
+        xsltParams,
+        'text/html'
+    );
 
     correctAction(htmlDoc, 'setgeopoint');
     correctAction(htmlDoc, 'setvalue');
@@ -68,13 +73,14 @@ export const transform = async <T extends Survey>(
         replaceTheme(htmlDoc, theme);
     }
 
-    replaceMediaSources(htmlDoc, mediaMap);
-
     const languageMap = replaceLanguageTags(htmlDoc);
 
     if (markdown !== false) {
-        renderMarkdown(htmlDoc, mediaMap);
+        renderMarkdown(htmlDoc);
     }
+
+    replaceMediaSources(htmlDoc, mediaMap);
+    addFormLogo(htmlDoc, mediaMap['form_logo.png']);
 
     const form = serializeHTML(htmlDoc);
     const xmlDoc = xslTransform(xslModelDocument, xformDoc);
@@ -91,12 +97,14 @@ export const transform = async <T extends Survey>(
     delete survey.markdown;
     delete survey.openclinica;
 
-    return Object.assign(survey, {
+    const result = Object.assign(survey, {
         form,
         model,
         languageMap,
         transformerVersion: PACKAGE_VERSION,
     });
+
+    return result;
 };
 
 interface XSLTParams {
@@ -106,7 +114,8 @@ interface XSLTParams {
 const xslTransform = (
     xsl: XMLDocument,
     xform: XMLDocument,
-    xsltParams: XSLTParams = {} as XSLTParams
+    xsltParams: XSLTParams = {} as XSLTParams,
+    mimeType = 'text/xml'
 ) => {
     const processor = new XSLTProcessor();
 
@@ -116,10 +125,10 @@ const xslTransform = (
         processor.setParameter(null, parameter, value);
     });
 
-    const targetDocument = document.implementation.createDocument(
-        NAMESPACES.xmlns,
-        `root`
-    );
+    const targetDocument =
+        mimeType === 'text/html'
+            ? document.implementation.createHTMLDocument()
+            : document.implementation.createDocument(NAMESPACES.xmlns, `root`);
     const transformed = processor.transformToFragment(xform, targetDocument);
 
     targetDocument.documentElement.replaceWith(transformed);
@@ -648,9 +657,10 @@ const replaceTheme = (doc: Document, theme: string) => {
 
 const replaceMediaSources = (
     doc: Document,
-    mediaMap: Record<string, string>
+    mediaMap: Record<string, string>,
+    root: Document | Element = doc
 ) => {
-    const mediaElements = doc.querySelectorAll('[src], a[href]');
+    const mediaElements = root.querySelectorAll('[src], a[href]');
 
     mediaElements.forEach((mediaEl) => {
         const attribute =
@@ -667,9 +677,10 @@ const replaceMediaSources = (
             mediaEl.setAttribute(attribute, replacement);
         }
     });
+};
 
+const addFormLogo = (doc: Document, formLogo?: string) => {
     // add form logo <img> element if applicable
-    const formLogo = mediaMap['form_logo.png'];
     const formLogoEl = doc.querySelector('.form-logo');
 
     if (formLogo && formLogoEl) {
@@ -826,10 +837,7 @@ const addInstanceIDNodeIfMissing = (doc: Document) => {
 /**
  * Converts a subset of Markdown in all textnode children of labels and hints into HTML
  */
-const renderMarkdown = (
-    htmlDoc: Document,
-    mediaMap: Record<string, string>
-) => {
+const renderMarkdown = (htmlDoc: Document) => {
     const form = htmlDoc.querySelector(':root > form');
 
     if (form == null) {
@@ -839,6 +847,11 @@ const renderMarkdown = (
     const labelHintElements = form.querySelectorAll(
         'span.question-label, span.or-hint'
     );
+
+    const fragment = document.createDocumentFragment();
+    const fragmentRoot = document.createElement('div');
+
+    fragment.append(fragmentRoot);
 
     labelHintElements.forEach((element) => {
         const outputs = Array.from(element.querySelectorAll('span.or-output'));
@@ -864,17 +877,11 @@ const renderMarkdown = (
             .replace(/>/g, '&gt;');
 
         const rendered = markdownToHTML(original);
-        const parsed = parseHTML(
-            `<!DOCTYPE html><html><body><div class="temporary-root">${rendered}</div></body></html>`
-        );
 
-        replaceMediaSources(parsed, mediaMap);
+        fragmentRoot.innerHTML = rendered;
 
-        const root = parsed.documentElement.querySelector(
-            '.temporary-root'
-        ) as Element;
         const treeWalker = htmlDoc.createTreeWalker(
-            root,
+            fragmentRoot,
             NodeFilter.SHOW_COMMENT
         );
 
@@ -899,7 +906,7 @@ const renderMarkdown = (
             }
         });
 
-        const children = Array.from(root.childNodes);
+        const children = Array.from(fragmentRoot.childNodes);
 
         element.replaceChildren(...children);
     });

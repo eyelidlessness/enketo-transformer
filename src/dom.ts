@@ -19,12 +19,7 @@ export const parseXML = (xml: string) => {
     return parser.parseFromString(xml, 'text/xml');
 };
 
-export const serializeHTML = (doc: Document) => {
-    const { documentElement } = doc;
-    const { innerHTML } = document.importNode(documentElement, true) as Element;
-
-    return innerHTML;
-};
+export const serializeHTML = (doc: Document) => doc.documentElement.innerHTML;
 
 export const serializeXML = (doc: XMLDocument) => {
     const { documentElement } = doc;

@@ -6,6 +6,7 @@ import {
     define as baseDefine,
     SERVER_PORT,
 } from './config/build.shared';
+import { resolvePath } from './tools/shared';
 
 const ENV = process.env.NODE_ENV ?? 'web';
 
@@ -51,6 +52,7 @@ export const config: UserConfig = {
         entries: ['./src/web.ts'],
         exclude: external,
     },
+    root: resolvePath('.'),
     server: { port: SERVER_PORT },
     test: {
         globals: true,
