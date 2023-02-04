@@ -5,6 +5,7 @@ import { baseConfig } from './config/build.shared';
 export default defineConfig({
     ...baseConfig,
 
+    assetsInclude: ['src/**/*.xsl', 'test/**/*.xml'],
     build: {
         ...baseConfig.build,
 
@@ -15,6 +16,14 @@ export default defineConfig({
         minify: false,
         outDir: 'dist',
         sourcemap: true,
+        // watch: {
+        //     include: [
+        //         'src/**/*.ts',
+        //         'src/**/*.xsl',
+        //         'test/**/*.ts',
+        //         'test/**/*.xml',
+        //     ],
+        // },
     },
     optimizeDeps: {
         disabled: true,
@@ -31,6 +40,7 @@ export default defineConfig({
         // functionality which depends on libxmljs/libxslt.
         threads: false,
 
+        cache: false,
         coverage: {
             provider: 'istanbul',
             include: ['src/**/*.ts'],
@@ -40,6 +50,18 @@ export default defineConfig({
 
         globals: true,
         include: ['test/**/*.spec.ts'],
+        // include_: [
+        //     'test/bad-external.spec.ts',
+        //     // 'test/benchmarks.ts',
+        //     'test/language.spec.ts',
+        //     'test/markdown.spec.ts',
+        //     // 'test/shared.ts',
+        //     'test/sheets.spec.ts',
+        //     // 'test/snapshot.spec.ts',
+        //     'test/transformer.spec.ts',
+        // ],
+        // include: ['test/snapshot.spec.ts'],
+        // include: ['test/transformer.spec.ts'],
         reporters: 'verbose',
         sequence: { shuffle: false },
     },

@@ -13,23 +13,73 @@ const gc = runInNewContext('gc');
 
 const benchmarkStart = performance.now();
 
-const originPadWidth = Math.max(...fixtures.map(({ origin }) => origin.length));
+const sortedFixtures = fixtures.slice().sort((A, B) => {
+    const a = A.fileName.toLowerCase().replace(/.*\/([^/]+)$/, '$1');
+    const b = B.fileName.toLowerCase().replace(/.*\/([^/]+)$/, '$1');
+
+    if (a > b) {
+        return 1;
+    }
+
+    return b > a ? -1 : 0;
+});
+
+const originPadWidth = Math.max(
+    ...sortedFixtures.map(({ origin }) => origin.length)
+);
 const fileNamePadWidth = Math.max(
-    ...fixtures.map(({ fileName }) => fileName.length)
+    ...sortedFixtures.map(({ fileName }) => fileName.length)
 );
 
 class Sample {
     constructor(readonly duration: number, readonly error: Error | null) {}
 }
 
+/**
+ * T-Distribution two-tailed critical values for 95% confidence.
+ * For more info see http://www.itl.nist.gov/div898/handbook/eda/section3/eda3672.htm.
+ */
+const tTable: Record<string, number> = {
+    '1': 12.706,
+    '2': 4.303,
+    '3': 3.182,
+    '4': 2.776,
+    '5': 2.571,
+    '6': 2.447,
+    '7': 2.365,
+    '8': 2.306,
+    '9': 2.262,
+    '10': 2.228,
+    '11': 2.201,
+    '12': 2.179,
+    '13': 2.16,
+    '14': 2.145,
+    '15': 2.131,
+    '16': 2.12,
+    '17': 2.11,
+    '18': 2.101,
+    '19': 2.093,
+    '20': 2.086,
+    '21': 2.08,
+    '22': 2.074,
+    '23': 2.069,
+    '24': 2.064,
+    '25': 2.06,
+    '26': 2.056,
+    '27': 2.052,
+    '28': 2.048,
+    '29': 2.045,
+    '30': 2.042,
+    infinity: 1.96,
+};
+
 class TaskResult {
     samples: Sample[] = [];
 
     private json!: {
         readonly mean: number;
-        readonly min: number;
-        readonly max: number;
         readonly passed: boolean;
+        readonly relativeMarginOfError: number;
     };
 
     label: string;
@@ -41,15 +91,16 @@ class TaskResult {
     }
 
     get summary() {
-        const { mean, min, max, passed } = this.toJSON();
+        const { mean, relativeMarginOfError, passed } = this.toJSON();
+        const emoji = passed ? '✅' : '❌';
 
         return [
-            passed ? '✅' : '❌',
-            this.fileName,
-            passed ? `${mean.toFixed(2)}ms` : '',
-            passed ? `${max.toFixed(2)}ms` : '',
-            passed ? `${min.toFixed(2)}ms` : '',
-            passed ? `${this.samples.length}` : '',
+            `${emoji} ${this.fileName}`,
+            passed
+                ? `${mean.toFixed(2)}ms \xb1${relativeMarginOfError.toFixed(
+                      2
+                  )}%`
+                : '',
         ];
     }
 
@@ -58,30 +109,40 @@ class TaskResult {
             return this.json;
         }
 
-        const durations = this.samples.map(({ duration }) => duration);
+        const { samples } = this;
+        const { length } = samples;
+        const durations = samples.map(({ duration }) => duration);
         const mean =
-            durations.reduce((acc, duration) => acc + duration, 0) /
-            durations.length;
-        const min = Math.min(...durations);
-        const max = Math.max(...durations);
+            durations.reduce((acc, duration) => acc + duration, 0) / length;
+        const degreesOfFreedom = length - 1;
+        const variance =
+            durations.reduce(
+                (sum, duration) => sum + (duration - mean) ** 2,
+                0
+            ) / degreesOfFreedom;
+        const stdDeviation = Math.sqrt(variance);
+        const stdErrorOfMean = stdDeviation / Math.sqrt(length);
+        const criticalValue =
+            tTable[Math.round(degreesOfFreedom) || 1] ?? tTable.infinity;
+        const marginOfError = stdErrorOfMean * criticalValue;
+        const relativeMarginOfError = (marginOfError / mean) * 100 || 0;
         const passed = this.samples.every(({ error }) => error == null);
 
         this.json = {
             mean,
-            min,
-            max,
             passed,
+            relativeMarginOfError,
         };
 
         return this.json;
     }
 
     toString() {
-        const { mean, min, max } = this.toJSON();
+        const { mean, relativeMarginOfError } = this.toJSON();
 
-        return `${this.label} | ${mean.toFixed(2)}ms (${min.toFixed(
+        return `${this.label} | ${mean.toFixed(
             2
-        )} – ${max.toFixed(2)}ms)`;
+        )}ms \xb1${relativeMarginOfError.toFixed(2)}%`;
     }
 }
 
@@ -89,11 +150,11 @@ const iterations = Array(10).fill(null);
 const results: TaskResult[] = [];
 
 // Warmup
-await transform({ xform: fixtures[0].xform });
+await transform({ xform: sortedFixtures[0].xform });
 
 let failed = false;
 
-for await (const { fileName, origin, xform } of fixtures) {
+for await (const { fileName, origin, xform } of sortedFixtures) {
     gc();
 
     const result = new TaskResult(origin, fileName);
@@ -178,12 +239,8 @@ if (process.env.GITHUB_STEP_SUMMARY) {
     summary.addHeading('Benchmarks', 1);
 
     const headings = [
-        { data: 'Pass', header: true },
         { data: 'Name', header: true },
-        { data: 'Average', header: true },
-        { data: 'Worst', header: true },
-        { data: 'Best', header: true },
-        { data: 'Samples', header: true },
+        { data: 'Result', header: true },
     ];
     const collapseResults = results.length > 2;
 
