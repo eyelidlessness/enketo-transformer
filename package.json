@@ -29,7 +29,7 @@
     },
     "contributors": [],
     "scripts": {
-        "prepack": "npm run build",
+        "prepare": "npm run build",
         "benchmarks": "vite-node ./test/benchmarks.ts",
         "build": "vite build && npm run tsc",
         "start": "vite",
@@ -90,7 +90,7 @@
         "eslint-plugin-react": "^7.31.11",
         "eslint-plugin-react-hooks": "^4.6.0",
         "eslint-plugin-unicorn": "^36.0.0",
-        "eslint-plugin-vitest": "0.0.21",
+        "eslint-plugin-vitest": "^0.0.32",
         "grunt": "^1.5.3",
         "http-server": "^13.1.0",
         "istanbul-reporter-shield-badge": "^1.2.1",
@@ -101,7 +101,7 @@
         "typescript": "^4.9.4",
         "vite": "^4.0.3",
         "vite-node": "^0.28.4",
-        "vite-plugin-node": "^1.0.0",
+        "vite-plugin-node": "^3.0.2",
         "vitest": "^0.26.2"
     },
     "volta": {
