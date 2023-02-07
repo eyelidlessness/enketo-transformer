@@ -1,6 +1,6 @@
 {
     "name": "enketo-transformer",
-    "version": "2.1.7",
+    "version": "2.1.8-beta.0",
     "description": "Library/app that transforms ODK-compliant XForms into a format that Enketo can consume",
     "license": "Apache-2.0",
     "type": "module",
@@ -29,6 +29,7 @@
     },
     "contributors": [],
     "scripts": {
+        "prepack": "npm run build",
         "benchmarks": "vite-node ./test/benchmarks.ts",
         "build": "vite build && npm run tsc",
         "start": "vite",
