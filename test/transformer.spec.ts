@@ -1,4 +1,4 @@
-import { transform } from '../src/transformer';
+import { Survey, transform } from '../src/transformer';
 import {
     getTransformedForm,
     getTransformedFormDocument,
@@ -1451,6 +1451,65 @@ describe('transformer', () => {
                 'xforms-value-changed'
             );
             expect(ageHidden.hasAttribute('data-setgeopoint')).to.equal(true);
+        });
+    });
+
+    describe('API stability', () => {
+        interface ExtraPropertiesInput extends Required<Survey> {
+            extraneous: 'property';
+        }
+
+        let input: ExtraPropertiesInput;
+
+        interface ExtraPropertiesOutput extends TransformedSurvey {
+            extraneous: 'property';
+        }
+
+        let transformed: ExtraPropertiesOutput & {
+            [K in keyof Survey]?: never;
+        };
+
+        beforeAll(async () => {
+            input = {
+                xform: externalXForm,
+                markdown: true,
+                media: {
+                    'form_logo.png': 'http://example.com/form_logo.png',
+                },
+                openclinica: 1,
+                preprocess: (doc) => doc,
+                theme: 'mytheme',
+                extraneous: 'property' as const,
+            };
+
+            // @ts-expect-error - Ensure the type matches expected runtime
+            transformed = await transform({
+                xform: externalXForm,
+            });
+
+            transformed = await transform(input);
+        });
+
+        it('preserves extraneous properties', () => {
+            expect(transformed.extraneous).to.equal('property');
+        });
+
+        it('returns a reference to the original input object', () => {
+            // @ts-expect-error - TypeScript quite understandably disagrees because the types don't match!
+            expect(transformed === input).to.equal(true);
+        });
+
+        it('deletes all other survey input properties besides `theme`', () => {
+            [input, transformed].forEach((object) => {
+                expect(Object.keys(object).sort()).to.deep.equal([
+                    'extraneous',
+                    'form',
+                    'languageMap',
+                    'model',
+                    'theme',
+                    'transformerVersion',
+                ]);
+            });
         });
     });
 });
