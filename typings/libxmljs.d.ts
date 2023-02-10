@@ -1,24 +1,48 @@
 declare module 'libxmljs' {
-    export interface Node {
+    export class Node {
+        addChild(child: Node): this;
+        addNextSibling(siblingNode: Node): Node;
+        addPrevSibling(siblingNode: Node): Node;
+        childNodes(): Node[];
+
+        /**
+         *
+         * @param recurse - defaults to `true`
+         */
+        clone(recurse?: boolean): this;
+
+        doc(): Document;
+        node(localName: string): Element;
+        remove(): this;
         replace(node: Node): unknown;
+        text(): string;
+        text(value: string): this;
+        toString(formatted?: boolean): string;
+        type(): 'comment' | 'document' | 'element' | 'text' | 'attribute';
     }
 
-    export interface NamedNode extends Node {
+    export class Comment extends Node {
+        type(): 'text';
+    }
+
+    export class Text extends Node {
+        type(): 'text';
+    }
+
+    export class NamedNode extends Node {
         name(): string;
         namespace(uri: string): this;
     }
 
-    export interface Attr extends NamedNode {
+    export class Attr extends NamedNode {
         name(): string;
+        type(): 'comment';
         value(): string | null;
         value(value: string): this;
     }
 
-    interface ParentNode extends NamedNode {
-        addChild(child: this): this;
-        addNextSibling(sibling: this): this;
+    export class ParentNode extends NamedNode {
         attrs(): Attr[];
-        childNodes(): Element[];
 
         get(
             expression: string,
@@ -28,36 +52,28 @@ declare module 'libxmljs' {
         find(
             expression: string,
             namespaces?: Record<string, string>
-        ): Element[];
-
-        node(localName: string): this;
-        toString(unknownOption?: boolean): string;
+        ): Element[] | void;
     }
 
-    export class Element {
+    export class Element extends ParentNode {
         constructor(document: Document, name: string);
-    }
-
-    export interface Element extends ParentNode {
         attr(name: string): Attr | null;
         attr(name: string, value: string): Element;
         attr(attributes: Record<string, string>): Element;
-        clone(): this;
         parent(): this | null; // Maybe `Element | Document | null`?
-        remove(): unknown; // Probably `boolean`?
-        text(): string;
-        text(value: string): this;
+        type(): 'element';
     }
 
-    export interface Document extends ParentNode {
+    export class Document extends ParentNode {
         root(): Element;
+        type(): 'document';
     }
 
     export const parseXml: (xml: string) => Document;
 
-    export interface DocumentFragment extends ParentNode {
+    export class DocumentFragment extends ParentNode {
         root(): ParentNode;
     }
 
-    export const parseHtmlFragment: (html: string) => DocumentFragment;
+    export const parseHtmlFragment: (html: string) => Document;
 }

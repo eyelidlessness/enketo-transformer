@@ -1,23 +1,53 @@
+// /// <reference lib="dom" />
+// /// <reference lib="dom.iterable" />
+
 import crypto from 'crypto';
 import libxslt from 'libxslt';
-import type {
-    Document as XMLJSDocument,
-    DocumentFragment as XMLJSDocumentFragment,
-} from 'libxmljs';
+import type { Document as XMLJSDocument } from 'libxmljs';
 import pkg from '../package.json';
+import {
+    cleanCaches,
+    DOMParser,
+    Element,
+    getNodesByXPathExpression,
+    NAMESPACES,
+    preprocessXForm,
+    XMLDocument,
+    XSLTProcessor,
+} from './dom';
 import xslForm from './xsl/openrosa2html5form.xsl?raw';
 import xslModel from './xsl/openrosa2xmlmodel.xsl?raw';
 import { parseLanguage } from './language';
 import { markdownToHTML } from './markdown';
 import { escapeURLPath, getMediaPath } from './url';
+// import { DOMMimeType } from './dom/shared';
+
+// declare global {
+//     interface DOMParser {
+//         parseFromString<T extends DOMMimeType>(
+//             str: string,
+//             mimeType: T
+//         ): T extends 'text/xml' ? XMLDocument : Document;
+//     }
+
+//     const getNodesByXPathExpression: (
+//         doc: Document,
+//         expression: string,
+//         context?: Document | Element | DocumentFragment
+//     ) => Element[];
+
+//     const preprocessXForm:
+//         | ((
+//               preprocess: (...args: any[]) => any,
+//               xmlDocument: XMLDocument
+//           ) => XMLDocument)
+//         | undefined;
+// }
 
 const { libxmljs } = libxslt;
 
-export const NAMESPACES = {
-    xmlns: 'http://www.w3.org/2002/xforms',
-    orx: 'http://openrosa.org/xforms',
-    h: 'http://www.w3.org/1999/xhtml',
-} as const;
+/** @private */
+export const getNode = () => import.meta.glob('./dom/**/*.ts');
 
 type LibXMLJS = typeof libxmljs;
 
@@ -42,12 +72,16 @@ export interface TransformedSurvey {
     transformerVersion: string;
 }
 
+let activeTransforms = 0;
+
 /**
  * Performs XSLT transformation on XForm and process the result.
  */
 export const transform = async <T extends Survey>(
     survey: T
 ): Promise<TransformedSurvey & Omit<T, keyof Survey>> => {
+    activeTransforms += 1;
+
     const { xform, markdown, media, openclinica, preprocess, theme } = survey;
 
     const xsltParams = openclinica
@@ -60,13 +94,16 @@ export const transform = async <T extends Survey>(
         Object.entries(media || {}).map((entry) => entry.map(escapeURLPath))
     );
 
-    const doc = await parseXML(xform);
+    const doc = parser.parseFromString(xform, 'text/xml');
     const xformDoc =
-        typeof preprocess === 'function' ? preprocess.call(libxmljs, doc) : doc;
+        typeof preprocess === 'function' &&
+        typeof preprocessXForm === 'function'
+            ? preprocessXForm(preprocess, doc)
+            : doc;
 
     processBinaryDefaults(xformDoc, mediaMap);
 
-    const htmlDoc = await xslTransform(xslForm, xformDoc, xsltParams);
+    const htmlDoc = xslTransform(xslForm, xformDoc, xsltParams);
 
     correctAction(htmlDoc, 'setgeopoint');
     correctAction(htmlDoc, 'setvalue');
@@ -77,8 +114,8 @@ export const transform = async <T extends Survey>(
     const form =
         markdown !== false
             ? renderMarkdown(htmlDoc, mediaMap)
-            : docToString(htmlDoc);
-    const xmlDoc = await xslTransform(xslModel, xformDoc);
+            : docToString(htmlDoc, 'text/html');
+    const xmlDoc = xslTransform(xslModel, xformDoc);
 
     replaceMediaSources(xmlDoc, mediaMap);
     addInstanceIdNodeIfMissing(xmlDoc);
@@ -92,6 +129,14 @@ export const transform = async <T extends Survey>(
     delete survey.markdown;
     delete survey.openclinica;
 
+    activeTransforms -= 1;
+
+    setImmediate(() => {
+        if (activeTransforms === 0) {
+            cleanCaches();
+        }
+    });
+
     return Object.assign(survey, {
         form,
         model,
@@ -104,45 +149,54 @@ interface XSLTParams {
     openclinica?: number;
 }
 
+const parser = new DOMParser();
+
 const xslTransform = (
     xslStr: string,
-    xmlDoc: XMLJSDocument,
+    xmlDoc: XMLDocument,
     xsltParams: XSLTParams = {} as XSLTParams
-) =>
-    new Promise<XMLJSDocument>((resolve, reject) => {
-        libxslt.parse(xslStr, (error, stylesheet) => {
-            if (stylesheet == null) {
-                reject(error);
-            } else {
-                stylesheet.apply(xmlDoc, xsltParams, (error, result) => {
-                    if (result == null) {
-                        reject(error);
-                    } else {
-                        resolve(result);
-                    }
-                });
-            }
-        });
+) => {
+    const xsltProcessor = new XSLTProcessor();
+    const xslDoc = parser.parseFromString(xslStr, 'text/xml');
+
+    xsltProcessor.importStylesheet(xslDoc);
+
+    Object.entries(xsltParams).forEach(([key, value]) => {
+        xsltProcessor.setParameter(null, key, value);
     });
 
+    const output = xmlDoc.implementation.createDocument(
+        NAMESPACES.xmlns,
+        `root`
+    );
+    const fragment = xsltProcessor.transformToFragment(xmlDoc, output);
+
+    fragment.childNodes.forEach((child) => {
+        output.documentElement.appendChild(child);
+    });
+
+    return output;
+};
+
 const processBinaryDefaults = (
-    doc: XMLJSDocument,
+    doc: XMLDocument,
     mediaMap: Record<string, string>
 ) => {
-    doc.find(
-        '/h:html/h:head/xmlns:model/xmlns:bind[@type="binary"]',
-        NAMESPACES
+    getNodesByXPathExpression(
+        doc,
+        '/h:html/h:head/xmlns:model/xmlns:bind[@type="binary"]'
     ).forEach((bind) => {
-        const nodeset = bind.attr('nodeset');
+        const nodeset = bind.getAttribute('nodeset');
 
-        if (nodeset && nodeset.value()) {
-            const path = `/h:html/h:head/xmlns:model/xmlns:instance${nodeset
-                .value()
-                ?.replace(/\//g, '/xmlns:')}`;
-            const dataNode = doc.get(path, NAMESPACES);
+        if (nodeset != null) {
+            const path = `/h:html/h:head/xmlns:model/xmlns:instance${nodeset.replace(
+                /\//g,
+                '/xmlns:'
+            )}`;
+            const [dataNode] = getNodesByXPathExpression(doc, path);
 
-            if (dataNode) {
-                const text = dataNode.text();
+            if (dataNode != null) {
+                const text = dataNode.textContent ?? '';
 
                 // Very crude URL checker which is fine for now,
                 // because at this point we don't expect anything other than jr://
@@ -150,7 +204,8 @@ const processBinaryDefaults = (
                     const value = getMediaPath(mediaMap, text);
                     const escapedText = escapeURLPath(text);
 
-                    dataNode.attr({ src: value }).text(escapedText);
+                    dataNode.setAttribute('src', value);
+                    dataNode.textContent = escapedText;
                 }
             }
         }
@@ -162,19 +217,20 @@ const processBinaryDefaults = (
  * This is much easier to correct in javascript than in XSLT
  */
 const correctAction = (
-    doc: XMLJSDocument,
+    doc: XMLDocument,
     localName: 'setvalue' | 'setgeopoint' = 'setvalue'
 ) => {
     /*
      * See setvalue.xml (/data/person/age_changed). A <setvalue> inside a form control results
      * in one label.question with a nested label.setvalue which is weird syntax (and possibly invalid HTML).
      */
-    doc.find(
+    getNodesByXPathExpression(
+        doc,
         `//*[contains(@class, "question")]//label/input[@data-${localName}]`
     ).forEach((setValueEl) => {
-        const clone = setValueEl.clone();
-        setValueEl.parent()?.addNextSibling(clone);
-        setValueEl.parent()?.remove();
+        const { parentElement } = setValueEl;
+
+        parentElement?.replaceWith(setValueEl);
     });
 
     /*
@@ -185,75 +241,65 @@ const correctAction = (
      * Note that a label.setvalue is always to set a default value (with odk-new-repeat, odk-instance-first-load), never
      * a value change directive (with xforms-value-changed)
      */
-    doc.find(
+    getNodesByXPathExpression(
+        doc,
         `//label[contains(@class, "${localName}")]/input[@data-${localName}]`
     ).forEach((setValueEl) => {
-        const name = setValueEl.attr('name')?.value();
-        const questionSameName = doc.get(
+        const name = setValueEl.getAttribute('name');
+        const [questionSameName] = getNodesByXPathExpression(
+            doc,
             `//*[@name="${name}" and ( contains(../@class, 'question') or contains(../../@class, 'option-wrapper')) and not(@type='hidden')]`
         );
         if (questionSameName) {
             // Note that if the question has radiobuttons or checkboxes only the first of those gets the setvalue attributes.
             [`data-${localName}`, 'data-event'].forEach((name) => {
-                questionSameName.attr(
+                questionSameName.setAttribute(
                     name,
-                    setValueEl.attr(name)?.value() ?? name
+                    setValueEl.getAttribute(name) ?? name
                 );
             });
-            setValueEl.parent()?.remove();
+
+            setValueEl.parentElement?.remove();
         }
     });
 };
 
-const parseXML = (xmlStr: string) =>
-    new Promise<XMLJSDocument>((resolve, reject) => {
-        try {
-            const doc = libxmljs.parseXml(xmlStr);
+const HAS_THEME = /(theme-)[^"'\s]+/;
 
-            resolve(doc);
-        } catch (e) {
-            reject(e);
-        }
-    });
-
-const replaceTheme = (doc: XMLJSDocument, theme?: string) => {
-    const HAS_THEME = /(theme-)[^"'\s]+/;
-
+const replaceTheme = (doc: XMLDocument, theme?: string) => {
     if (!theme) {
         return;
     }
 
-    const formClassAttr = doc.root().get('/root/form')?.attr('class');
+    const [form] = getNodesByXPathExpression(doc, '/xmlns:root/form');
+    const classes = [...form.classList.values()];
+    const current = classes.find((item) => HAS_THEME.test(item));
+    const themeClass = `theme-${theme}`;
 
-    if (formClassAttr == null) {
-        return;
-    }
-
-    const formClassValue = formClassAttr.value();
-
-    if (
-        formClassAttr != null &&
-        formClassValue != null &&
-        HAS_THEME.test(formClassValue)
-    ) {
-        formClassAttr.value(formClassValue.replace(HAS_THEME, `$1${theme}`));
+    if (current == null) {
+        form.classList.add(themeClass);
     } else {
-        formClassAttr.value(`${formClassValue} theme-${theme}`);
+        form.classList.replace(current, themeClass);
     }
 };
 
-const replaceMediaSources = <T extends XMLJSDocument | XMLJSDocumentFragment>(
+const replaceMediaSources = <T extends XMLDocument | Element>(
     root: T,
     mediaMap?: Record<string, string>
 ) => {
-    if (!mediaMap) {
+    if (!mediaMap || root.ownerDocument == null) {
         return;
     }
 
     // iterate through each element with a src attribute
-    root.find('//*[@src] | //a[@href]').forEach((mediaEl) => {
-        const attribute = mediaEl.name().toLowerCase() === 'a' ? 'href' : 'src';
-        const src = mediaEl.attr(attribute)?.value();
+    getNodesByXPathExpression(
+        root.ownerDocument,
+        '//*[@src] | //a[@href]',
+        root
+    ).forEach((mediaEl) => {
+        const attribute =
+            mediaEl.nodeName.toLowerCase() === 'a' ? 'href' : 'src';
+        const src = mediaEl.getAttribute(attribute);
 
         if (src == null) {
             return;
@@ -262,15 +308,24 @@ const replaceMediaSources = <T extends XMLJSDocument | XMLJSDocumentFragment>(
         const replacement = getMediaPath(mediaMap, src);
 
         if (replacement) {
-            mediaEl.attr(attribute, replacement);
+            mediaEl.setAttribute(attribute, replacement);
         }
     });
 
     // add form logo <img> element if applicable
     const formLogo = mediaMap['form_logo.png'];
-    const formLogoEl = root.get('//*[@class="form-logo"]');
+    const [formLogoEl] = getNodesByXPathExpression(
+        root.ownerDocument,
+        '//*[@class="form-logo"]',
+        root
+    );
     if (formLogo && formLogoEl) {
-        formLogoEl.node('img').attr('src', formLogo).attr('alt', 'form logo');
+        const { ownerDocument } = root;
+        const img = ownerDocument.createElement('img');
+
+        img.setAttribute('src', formLogo);
+        img.setAttribute('alt', 'form logo');
+        formLogoEl.appendChild(img);
     }
 };
 
@@ -280,16 +335,17 @@ const replaceMediaSources = <T extends XMLJSDocument | XMLJSDocumentFragment>(
  *
  * @see http://www.w3.org/International/questions/qa-choosing-language-tags
  */
-const replaceLanguageTags = (doc: XMLJSDocument) => {
+const replaceLanguageTags = (doc: XMLDocument) => {
     const languageMap: Record<string, string> = {};
 
-    const languageElements = doc.find(
-        '/root/form/select[@id="form-languages"]/option'
+    const languageElements = getNodesByXPathExpression(
+        doc,
+        '/xmlns:root/form/select[@id="form-languages"]/option'
     );
 
     // List of parsed language objects
     const languages = languageElements.map((el) => {
-        const lang = el.text();
+        const lang = el.textContent ?? '';
 
         return parseLanguage(lang, getLanguageSampleText(doc, lang));
     });
@@ -301,14 +357,13 @@ const replaceLanguageTags = (doc: XMLJSDocument) => {
 
     // add or correct dir and value attributes, and amend textcontent of options in language selector
     languageElements.forEach((el, index) => {
-        const val = el.attr('value')?.value();
+        const val = el.getAttribute('value');
         if (val && val !== languages[index].tag) {
             languageMap[val] = languages[index].tag;
         }
-        el.attr({
-            'data-dir': languages[index].directionality,
-            value: languages[index].tag,
-        }).text(languages[index].description);
+        el.setAttribute('data-dir', languages[index].directionality);
+        el.setAttribute('value', languages[index].tag);
+        el.textContent = languages[index].description;
     });
 
     // correct lang attributes
@@ -316,24 +371,25 @@ const replaceLanguageTags = (doc: XMLJSDocument) => {
         if (sourceLanguage === tag) {
             return;
         }
-        doc.find(`/root/form//*[@lang="${sourceLanguage}"]`).forEach((el) => {
-            el.attr({
-                lang: tag,
-            });
+        getNodesByXPathExpression(
+            doc,
+            `/xmlns:root/form//*[@lang="${sourceLanguage}"]`
+        ).forEach((el) => {
+            el.setAttribute('lang', tag);
         });
     });
 
     // correct default lang attribute
-    const langSelectorElement = doc.get('/root/form/*[@data-default-lang]');
+    const [langSelectorElement] = getNodesByXPathExpression(
+        doc,
+        '/xmlns:root/form/*[@data-default-lang]'
+    );
     if (langSelectorElement) {
-        const defaultLang = langSelectorElement
-            .attr('data-default-lang')
-            ?.value();
+        const defaultLang =
+            langSelectorElement.getAttribute('data-default-lang');
         languages.some(({ sourceLanguage, tag }) => {
             if (sourceLanguage === defaultLang) {
-                langSelectorElement.attr({
-                    'data-default-lang': tag,
-                });
+                langSelectorElement.setAttribute('data-default-lang', tag);
 
                 return true;
             }
@@ -348,46 +404,55 @@ const replaceLanguageTags = (doc: XMLJSDocument) => {
 /**
  * Obtains a non-empty hint text or other text sample of a particular form language.
  */
-const getLanguageSampleText = (doc: XMLJSDocument, language: string) => {
+const getLanguageSampleText = (doc: XMLDocument, language: string) => {
     // First find non-empty text content of a hint with that lang attribute.
     // If not found, find any span with that lang attribute.
     const langSampleEl =
-        doc.get(
-            `/root/form//span[contains(@class, "or-hint") and @lang="${language}" and normalize-space() and not(./text() = '-')]`
-        ) ||
-        doc.get(
-            `/root/form//span[@lang="${language}" and normalize-space() and not(./text() = '-')]`
-        );
+        getNodesByXPathExpression(
+            doc,
+            `/xmlns:root/form//span[contains(@class, "or-hint") and @lang="${language}" and normalize-space() and not(./text() = '-')]`
+        )?.[0] ||
+        getNodesByXPathExpression(
+            doc,
+            `/xmlns:root/form//span[@lang="${language}" and normalize-space() and not(./text() = '-')]`
+        )?.[0];
 
-    return langSampleEl?.text().trim() || 'nothing';
+    return langSampleEl?.textContent?.trim() || 'nothing';
 };
 
 /**
  * Temporary function to add a /meta/instanceID node if this is missing.
  * This used to be done in enketo-xslt but was removed when support for namespaces was added.
  */
-const addInstanceIdNodeIfMissing = (doc: XMLJSDocument) => {
+const addInstanceIdNodeIfMissing = (doc: XMLDocument) => {
     const xformsPath =
         '/xmlns:root/xmlns:model/xmlns:instance/*/xmlns:meta/xmlns:instanceID';
     const openrosaPath =
         '/xmlns:root/xmlns:model/xmlns:instance/*/orx:meta/orx:instanceID';
-    const instanceIdEl = doc.get(`${xformsPath} | ${openrosaPath}`, NAMESPACES);
+    const [instanceIdEl] = getNodesByXPathExpression(
+        doc,
+        `${xformsPath} | ${openrosaPath}`
+    );
 
     if (!instanceIdEl) {
-        const rootEl = doc.get(
-            '/xmlns:root/xmlns:model/xmlns:instance/*',
-            NAMESPACES
+        const [rootEl] = getNodesByXPathExpression(
+            doc,
+            '/xmlns:root/xmlns:model/xmlns:instance/*'
         );
-        const metaEl = doc.get(
-            '/xmlns:root/xmlns:model/xmlns:instance/*/xmlns:meta',
-            NAMESPACES
+        let [metaEl] = getNodesByXPathExpression(
+            doc,
+            '/xmlns:root/xmlns:model/xmlns:instance/*/xmlns:meta'
         );
 
-        if (metaEl) {
-            metaEl.node('instanceID');
-        } else if (rootEl) {
-            rootEl.node('meta').node('instanceID');
+        if (metaEl == null) {
+            metaEl = doc.createElement('meta');
+
+            rootEl.appendChild(metaEl);
         }
+
+        const instanceID = doc.createElement('instanceID');
+
+        metaEl.appendChild(instanceID);
     }
 };
 
@@ -395,64 +460,57 @@ const addInstanceIdNodeIfMissing = (doc: XMLJSDocument) => {
  * Converts a subset of Markdown in all textnode children of labels and hints into HTML
  */
 const renderMarkdown = (
-    htmlDoc: XMLJSDocument,
+    htmlDoc: XMLDocument,
     mediaMap: Record<string, string>
 ) => {
     const replacements: Record<string, string> = {};
 
     // First turn all outputs into text so *<span class="or-output></span>* can be detected
-    htmlDoc
-        .find('/root/form//span[contains(@class, "or-output")]')
-        .forEach((el, index) => {
-            const key = `---output-${index}`;
-            const textNode = el.childNodes()[0].clone();
-            replacements[key] = el.toString();
-            textNode.text(key);
-            el.replace(textNode);
-            // Note that we end up in a situation where we likely have sibling text nodes...
-        });
+    getNodesByXPathExpression(
+        htmlDoc,
+        '/xmlns:root/form//span[contains(@class, "or-output")]'
+    ).forEach((el, index) => {
+        const key = `---output-${index}`;
+        const textNode = el.childNodes[0].cloneNode(true);
+        replacements[key] = el.outerHTML;
+        textNode.textContent = key;
+        el.replaceWith(textNode);
+        // Note that we end up in a situation where we likely have sibling text nodes...
+    });
 
     // Now render markdown
-    htmlDoc
-        .find(
-            '/root/form//span[contains(@class, "question-label") or contains(@class, "or-hint")]'
-        )
-        .forEach((el, index) => {
-            let key;
-            /**
-             * Using text() is done because:
-             * a) We are certain that these <span>s do not contain other elements, other than formatting/markdown <span>s.
-             * b) This avoids the need to merge any sibling text nodes that could have been created in the previous step.
-             *
-             * Note that text() will convert &gt; to >
-             */
-            const original = el
-                .text()
-                .replace('<', '&lt;')
-                .replace('>', '&gt;');
-            let rendered = markdownToHTML(original);
+    getNodesByXPathExpression(
+        htmlDoc,
+        '/xmlns:root/form//span[contains(@class, "question-label") or contains(@class, "or-hint")]'
+    ).forEach((el, index) => {
+        let key;
+        /**
+         * Using text() is done because:
+         * a) We are certain that these <span>s do not contain other elements, other than formatting/markdown <span>s.
+         * b) This avoids the need to merge any sibling text nodes that could have been created in the previous step.
+         *
+         * Note that text() will convert &gt; to >
+         */
+        const original = (el.textContent ?? '')
+            .replace('<', '&lt;')
+            .replace('>', '&gt;');
+        let rendered = markdownToHTML(original);
 
-            if (original !== rendered) {
-                const fragment = libxmljs.parseHtmlFragment(
-                    `<div class="temporary-root">${rendered}</div>`
-                );
+        if (original !== rendered) {
+            const temporaryRoot = parser.parseFromString(
+                `<div class="temporary-root">${rendered}</div>`,
+                'text/html'
+            ).documentElement;
 
-                replaceMediaSources(fragment, mediaMap);
+            replaceMediaSources(temporaryRoot, mediaMap);
+            rendered = temporaryRoot.innerHTML;
+            key = `$$$${index}`;
+            replacements[key] = rendered;
+            el.textContent = key;
+        }
+    });
 
-                rendered = fragment
-                    .root()
-                    .childNodes()
-                    .map((node) => node.toString(false))
-                    .join('');
-
-                key = `$$$${index}`;
-                replacements[key] = rendered;
-                el.text(key);
-            }
-        });
-
-    // TODO: does this result in self-closing tags?
-    let htmlStr = docToString(htmlDoc);
+    let htmlStr = docToString(htmlDoc, 'text/html');
 
     // Now replace the placeholders with the rendered HTML
     // in reverse order so outputs are done last
@@ -473,15 +531,23 @@ const renderMarkdown = (
     return htmlStr;
 };
 
-const docToString = (doc: XMLJSDocument) => {
-    const element = doc.root().get('*');
+const docToString = (doc: XMLDocument, mimeType = 'text/xml') => {
+    const { documentElement } = doc;
+    const { innerHTML } = documentElement;
 
-    if (element == null) {
-        throw new Error('Document has no elements');
+    if (mimeType === 'text/html') {
+        const { documentElement } = parser.parseFromString(
+            innerHTML,
+            'text/html'
+        );
+
+        return documentElement.outerHTML;
     }
 
-    // TODO: does this result in self-closing tags?
-    return element.toString(false);
+    return innerHTML.replace(
+        /^(<model[^>]*\s)xmlns="http:\/\/www.w3.org\/2002\/xforms"([^>]*>)/,
+        '$1$2'
+    );
 };
 
 const md5 = (message: string | Buffer) => {
@@ -503,7 +569,7 @@ export const sheets = {
     xslModel,
 };
 
-export { escapeURLPath };
+export { escapeURLPath, NAMESPACES };
 
 /**
  * Exported for backwards compatibility, prefer named imports from enketo-transformer's index module.

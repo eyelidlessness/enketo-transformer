@@ -25,7 +25,7 @@ describe('for incompatible forms that require preprocessing', () => {
             return doc;
         }
 
-        doc.find('/h:html/h:body//xmlns:input[@query]', NAMESPACES).forEach(
+        doc.find('/h:html/h:body//xmlns:input[@query]', NAMESPACES)!.forEach(
             (input) => {
                 const q = input.attr('query');
                 const r = input.attr('ref');

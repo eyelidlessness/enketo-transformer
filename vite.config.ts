@@ -30,6 +30,11 @@ export default defineConfig({
     optimizeDeps: {
         disabled: true,
     },
+    resolve: {
+        alias: {
+            '@enketo-transformer/dom/env': './src/dom/node.ts',
+        },
+    },
     server: {
         port: config.port,
     },

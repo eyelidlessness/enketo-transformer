@@ -23,12 +23,10 @@
     "settings": {
         "import/extensions": [".ts"],
         "import/parsers": {
-            "@typescript-eslint/parser": [".ts"]
+            "@typescript-eslint/parser": [".js", ".ts"]
         },
         "import/resolver": {
-            "node": {
-                "extensions": [".js", ".ts"]
-            }
+            "typescript": {}
         },
         "jsdoc": {
             "tagNamePreference": {
@@ -65,6 +63,9 @@
         ],
         "import/order": "warn",
         "import/prefer-default-export": "off",
+        "max-classes-per-file": "off",
+        "no-dupe-class-members": "off",
+        "@typescript-eslint/no-dupe-class-members": "error",
         "no-param-reassign": "warn",
         "no-restricted-syntax": [
             "warn",
@@ -104,6 +105,7 @@
                 "no-undef": "off",
                 "no-redeclare": "off",
                 "@typescript-eslint/no-redeclare": "error",
+                "import/named": "off",
                 "import/no-unresolved": "off",
 
                 "import/extensions": [
@@ -129,6 +131,7 @@
         {
             "files": ["./**/*.d.ts"],
             "rules": {
+                "lines-between-class-members": "off",
                 "no-unused-vars": "off"
             }
         },

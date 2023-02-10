@@ -494,7 +494,7 @@ describe('transformer', () => {
                         );
                     });
 
-                    it('escapes media URLs in markdown linkes', () => {
+                    it('escapes media URLs in markdown links', () => {
                         const result = results[index];
 
                         expect(result.form).to.not.contain(
@@ -735,11 +735,13 @@ describe('transformer', () => {
         beforeAll(async () => {
             result1 = await getTransformedForm('no-instance-id.xml');
         });
-        it('adds a /meta/instanceID node', () =>
-            expect(result1.model).to.contain('<meta><instanceID/></meta>'));
+        it('adds a /meta/instanceID node', () => {
+            expect(result1.model).to.contain('<meta><instanceID/></meta>');
+        });
 
-        it('does not add it if it contains /meta/instanceID in the OpenRosa namespace', () =>
-            expect(modelNamespace.model).to.not.contain('<instanceID/>'));
+        it('does not add it if it contains /meta/instanceID in the OpenRosa namespace', () => {
+            expect(modelNamespace.model).to.not.contain('<instanceID/>');
+        });
     });
 
     describe('converts deprecated', () => {
