@@ -169,8 +169,6 @@ if (GITHUB_STEP_SUMMARY) {
     const fastest = summaries[summaries.length - 1];
 
     const summary = /* html */ `
-        <h1>Benchmarks</h1>
-
         <table>
             <tr>
                 <th></th>

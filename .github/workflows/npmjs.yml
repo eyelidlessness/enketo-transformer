@@ -12,28 +12,28 @@ jobs:
         runs-on: ubuntu-latest
         strategy:
             matrix:
-                target: ['node']
+                target: ['Node']
                 node: ['14', '16']
                 include:
-                    - target: web
+                    - target: Web
                       node: 16
-                      browser: firefox
-                    - target: web
+                      browser: Firefox
+                    - target: Web
                       node: 16
-                      browser: chromium
-                    - target: web
+                      browser: Chromium
+                    - target: Web
                       node: 16
-                      browser: webkit
+                      browser: WebKit
         steps:
-            - uses: actions/checkout@v2
-            - uses: actions/cache@v2
+            - uses: actions/checkout@v3
+            - uses: actions/cache@v3
               id: cache
               with:
                   path: |
                       node_modules
                       ~/.cache/ms-playwright
                   key: ${{ matrix.node }}-${{ hashFiles('**/package-lock.json') }}
-            - uses: actions/setup-node@v2
+            - uses: actions/setup-node@v3
               with:
                   node-version: ${{ matrix.node }}
                   registry-url: https://registry.npmjs.org/
@@ -43,7 +43,22 @@ jobs:
             - if: matrix.node == '16' && matrix.browser == 'webkit'
               run: sudo npx playwright install-deps
             - run: ENV=${{ matrix.target }} BROWSER=${{ matrix.browser }} npm test
-            - run: ENV=${{ matrix.target }} BROWSER=${{ matrix.browser }} npm run benchmarks
+            - id: benchmarks
+              run: |
+                  ENV=${{ matrix.target }} BROWSER=${{ matrix.browser }} npm run benchmarks
+                  BENCHMARKS_SUMMARY=$(cat $GITHUB_STEP_SUMMARY)
+                  echo "result=$BENCHMARKS_SUMMARY >> $GITHUB_OUTPUT"
+            - uses: marocchino/sticky-pull-request-comment@v2
+              if: matrix.target == 'Node'
+              with:
+                  header: Node ${{ matrix.node }}
+                  message: ${{ steps.benchmarks.outputs.result }}
+            - uses: marocchino/sticky-pull-request-comment@v2
+              if: matrix.target == 'Web'
+              with:
+                  header: ${{ matrix.browser}}
+                  message: |
+                      ${{ steps.benchmarks.outputs.result }}
             - if: github.event_name == 'release' && github.event.action == 'published' && matrix.node == '16' && matrix.target == 'node'
               run: npm publish
               env:
