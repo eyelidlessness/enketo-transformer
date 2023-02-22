@@ -44,21 +44,20 @@ jobs:
               run: sudo npx playwright install-deps
             - run: ENV=${{ matrix.target }} BROWSER=${{ matrix.browser }} npm test
             - id: benchmarks
-              run: |
-                  ENV=${{ matrix.target }} BROWSER=${{ matrix.browser }} npm run benchmarks
-                  BENCHMARKS_SUMMARY=$(cat $GITHUB_STEP_SUMMARY)
-                  echo "result=$BENCHMARKS_SUMMARY >> $GITHUB_OUTPUT"
+              run: ENV=${{ matrix.target }} BROWSER=${{ matrix.browser }} npm run benchmarks
+            - run: |
+                  echo "Benchmark results?:"
+                  echo $BENCHMARK_SUMMARY
             - uses: marocchino/sticky-pull-request-comment@v2
               if: matrix.target == 'Node'
               with:
                   header: Node ${{ matrix.node }}
-                  message: ${{ steps.benchmarks.outputs.result }}
+                  path: ./.benchmarks.md
             - uses: marocchino/sticky-pull-request-comment@v2
               if: matrix.target == 'Web'
               with:
                   header: ${{ matrix.browser}}
-                  message: |
-                      ${{ steps.benchmarks.outputs.result }}
+                  path: ./.benchmarks.md
             - if: github.event_name == 'release' && github.event.action == 'published' && matrix.node == '16' && matrix.target == 'node'
               run: npm publish
               env:
