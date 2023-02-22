@@ -25,7 +25,16 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
     extension-element-prefixes="exsl str dyn"
     version="1.0"
     >
+    <xsl:param name="bodyClass"/>
+    <xsl:param name="formTitle"/>
+    <xsl:param name="hasLanguages"/>
+    <xsl:param name="primaryInstanceId"/>
+    <xsl:param name="primaryInstanceName"/>
+    <xsl:param name="submissionAction"/>
+    <xsl:param name="submissionMethod"/>
+    <xsl:param name="submissionPublicKey"/>
     <xsl:param name="openclinica"/>
+
     <xsl:output method="html" omit-xml-declaration="yes" encoding="UTF-8" indent="yes"/><!-- for xml: version="1.0" -->
 
     <xsl:key
@@ -45,10 +54,6 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
         match="/h:html/h:head/xf:model/xf:bind"
         use="@calculate != ''" />
     <xsl:key name="instances" match="/h:html/h:head/xf:model/xf:instance" use="true()" />
-    <xsl:key
-        name="primary-instance-root"
-        match="/h:html/h:head/xf:model/xf:instance[1]/child::node()"
-        use="true()" />
     <xsl:key
         name="model-actions"
         match="/h:html/h:head/xf:model/xf:setvalue[@event] | /h:html/h:head/xf:model/odk:setgeopoint[@event]"
@@ -134,40 +139,33 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                 <form autocomplete="off" novalidate="novalidate" class="clearfix" dir="ltr">
                     <xsl:attribute name="class">
                         <xsl:value-of select="'or clearfix'" />
-                        <xsl:if test="/h:html/h:body/@class">
-                            <xsl:value-of select="concat(' ', /h:html/h:body/@class)" />
+                        <xsl:if test="$bodyClass">
+                            <xsl:value-of select="concat(' ', $bodyClass)" />
                         </xsl:if>
                     </xsl:attribute>
                     <xsl:attribute name="data-form-id">
                         <xsl:choose>
-                            <xsl:when test="key('primary-instance-root', true())/@id">
-                                <xsl:value-of select="key('primary-instance-root', true())/@id" />
+                            <xsl:when test="$primaryInstanceId">
+                                <xsl:value-of select="$primaryInstanceId" />
                             </xsl:when>
                             <xsl:otherwise>
                                 <xsl:text>_</xsl:text>
                             </xsl:otherwise>
                         </xsl:choose>
                     </xsl:attribute>
-                    <xsl:if test="/h:html/h:head/xf:model/xf:submission/@action">
+                    <xsl:if test="$submissionAction">
                         <xsl:attribute name="action">
-                            <xsl:value-of select="/h:html/h:head/xf:model/xf:submission/@action"/>
+                            <xsl:value-of select="$submissionAction"/>
                         </xsl:attribute>
                     </xsl:if>
-                    <xsl:if test="/h:html/h:head/xf:model/xf:submission/@method">
+                    <xsl:if test="$submissionMethod">
                         <xsl:attribute name="method">
-                            <xsl:choose>
-                                <xsl:when test="/h:html/h:head/xf:model/xf:submission/@method = 'form-data-post'">
-                                     <xsl:value-of select="'post'"/>
-                                </xsl:when>
-                                <xsl:otherwise>
-                                    <xsl:value-of select="/h:html/h:head/xf:model/xf:submission/@method"/>
-                                </xsl:otherwise>
-                            </xsl:choose>
+                            <xsl:value-of select="$submissionMethod" />
                         </xsl:attribute>
                     </xsl:if>
-                    <xsl:if test="/h:html/h:head/xf:model/xf:submission/@base64RsaPublicKey">
+                    <xsl:if test="$submissionPublicKey">
                         <xsl:attribute name="data-base64RsaPublicKey">
-                            <xsl:value-of select="/h:html/h:head/xf:model/xf:submission/@base64RsaPublicKey"/>
+                            <xsl:value-of select="$submissionPublicKey"/>
                         </xsl:attribute>
                     </xsl:if>
                     <xsl:text>&#10;</xsl:text>
@@ -176,14 +174,7 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                         <xsl:text></xsl:text>
                     </section>
                     <h3 dir="auto" id="form-title">
-                        <xsl:choose>
-                            <xsl:when test="/h:html/h:head/h:title">
-                                <xsl:value-of select="/h:html/h:head/h:title"/>
-                            </xsl:when>
-                            <xsl:otherwise>
-                                <xsl:text>No Title</xsl:text>
-                            </xsl:otherwise>
-                        </xsl:choose>
+                        <xsl:value-of select="$formTitle"/>
                     </h3>
                 <!--
                     <div id="stats" style="display: none;">
@@ -201,7 +192,7 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                         <span id="jrPreload"><xsl:value-of select="count(/h:html/h:head/xf:model/xf:bind[@jr:preload])"/></span>
                     </div>
                 -->
-                    <xsl:if test="//*/@lang" >
+                    <xsl:if test="$hasLanguages = 'true'" >
                         <select id="form-languages">
                             <xsl:if test="$translated != 'true'">
                                 <xsl:attribute name="style">display:none;</xsl:attribute>
@@ -1737,7 +1728,7 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
         <xsl:variable name="nodeset_a">
             <xsl:choose>
                 <xsl:when test="not(substring($nodeset_u, 1, 1) = '/')">
-                    <xsl:value-of select="concat('/', local-name(key('primary-instance-root', true())[1]), '/', $nodeset_u)"/>
+                    <xsl:value-of select="concat('/', $primaryInstanceName, '/', $nodeset_u)"/>
             <!--<xsl:message terminate="yes">ERROR: Could not determine absolute path/to/instance/node (terminated transformation), found: <xsl:value-of select="$nodeset" />.</xsl:message>-->
                 </xsl:when>
                 <xsl:otherwise>

@@ -55,17 +55,69 @@ const isFunction = <T extends (...args: any[]) => any>(
     value: unknown
 ): value is T => typeof value === 'function';
 
+interface XSLTParams {
+    bodyClass: string | null | undefined;
+    formTitle: string;
+    hasLanguages: boolean;
+    primaryInstanceId: string | null | undefined;
+    primaryInstanceName: string | null | undefined;
+    submissionAction: string | null | undefined;
+    submissionMethod: string | null | undefined;
+    submissionPublicKey: string | null | undefined;
+    openclinica: number | null | undefined;
+}
+
+const getXSLTParams = (survey: Survey, xformDoc: DOM.Document): XSLTParams => {
+    const body = getNodeByXPathExpression(
+        xformDoc,
+        '/h:html/h:body',
+        NAMESPACES
+    );
+    const bodyClass = body?.getAttribute('class');
+
+    const primaryInstanceRoot = getNodeByXPathExpression(
+        xformDoc,
+        '/h:html/h:head/xmlns:model/xmlns:instance[1]/*',
+        NAMESPACES
+    );
+
+    const formTitle =
+        getNodeByXPathExpression(
+            xformDoc,
+            '/h:html/h:head/h:title',
+            NAMESPACES
+        )?.textContent?.trim() ?? 'No Title';
+
+    const modelSubmission = getNodeByXPathExpression(
+        xformDoc,
+        '//xmlns:submission',
+        NAMESPACES
+    );
+    let submissionMethod = modelSubmission?.getAttribute('method');
+
+    if (submissionMethod === 'form-data-post') {
+        submissionMethod = 'post';
+    }
+
+    return {
+        bodyClass,
+        formTitle,
+        hasLanguages: getNodeByXPathExpression(xformDoc, '//@lang') != null,
+        openclinica: survey.openclinica ? 1 : undefined,
+        primaryInstanceId: primaryInstanceRoot?.getAttribute('id'),
+        primaryInstanceName: primaryInstanceRoot?.nodeName.toLowerCase(),
+        submissionAction: modelSubmission?.getAttribute('action'),
+        submissionMethod,
+        submissionPublicKey:
+            modelSubmission?.getAttribute('base64RsaPublicKey'),
+    };
+};
+
 /**
  * Performs XSLT transformation on XForm and process the result.
  */
 export const transform: Transform = async (survey) => {
     const { xform, markdown, media, openclinica, theme } = survey;
-
-    const xsltParams = openclinica
-        ? {
-              openclinica: 1,
-          }
-        : {};
 
     const mediaMap = Object.fromEntries(
         Object.entries(media || {}).map((entry) => entry.map(escapeURLPath))
@@ -81,6 +133,12 @@ export const transform: Transform = async (survey) => {
         const { libxmljs } = await import('libxslt');
 
         xformDoc = preprocess.call(libxmljs, xformDoc as any);
+    }
+
+    const xsltParams = getXSLTParams(survey, xformDoc);
+
+    if (openclinica) {
+        xsltParams.openclinica = 1;
     }
 
     processBinaryDefaults(xformDoc, mediaMap);
@@ -124,22 +182,24 @@ export const transform: Transform = async (survey) => {
     });
 };
 
-interface XSLTParams {
-    openclinica?: number;
-}
-
 const xslTransform = (
     xslDoc: DOM.Document,
     xmlDoc: DOM.Document,
-    xsltParams: XSLTParams = {} as XSLTParams
+    xsltParams?: XSLTParams
 ) => {
     const xsltProcessor = new XSLTProcessor();
 
     xsltProcessor.importStylesheet(xslDoc);
 
-    Object.entries(xsltParams).forEach(([key, value]) => {
-        xsltProcessor.setParameter(null, key, value);
-    });
+    if (xsltParams != null) {
+        Object.entries(xsltParams).forEach(([key, value]) => {
+            if (value == null) {
+                xsltProcessor.setParameter(null, key, '');
+            } else {
+                xsltProcessor.setParameter(null, key, String(value));
+            }
+        });
+    }
 
     return xsltProcessor.transformToDocument(xmlDoc);
 };

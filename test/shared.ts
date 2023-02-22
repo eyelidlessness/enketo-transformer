@@ -2,7 +2,7 @@ import { DOMParser } from 'linkedom';
 import type { Attr } from 'linkedom/types/interface/attr';
 import type { Element as BaseElement } from 'linkedom/types/interface/element';
 import type { Node } from 'linkedom/types/interface/node';
-import type { Page } from 'playwright';
+import type { ConsoleMessage, Page } from 'playwright';
 import { port } from '../config/config.json';
 import firefoxUserPrefs from '../config/firefox.json';
 import type { Survey, Transform, TransformedSurvey } from '../src/transformer';
@@ -50,9 +50,19 @@ if (ENV === 'node') {
 
         page = await context.newPage();
 
-        page.on('console', async (message) => {
+        let consoleQueue: Array<Promise<any>> = [];
+
+        const onConsole = async (message: ConsoleMessage) => {
             // This basically just suppresses useless built-in Vite logging
             if (!isLoading) {
+                const previousLog = consoleQueue[0];
+
+                if (previousLog != null) {
+                    await previousLog;
+
+                    consoleQueue = consoleQueue.slice(1);
+                }
+
                 let type = message.type();
 
                 if (type === 'warning') {
@@ -75,6 +85,12 @@ if (ENV === 'node') {
                 // the correct arguments for whichever console method was called.
                 console[type](...args);
             }
+        };
+
+        page.on('console', (message) => {
+            const logPromise = onConsole(message);
+
+            consoleQueue.unshift(logPromise);
         });
 
         await page.goto(url);
