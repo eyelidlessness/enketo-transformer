@@ -14,4 +14,6 @@ export const setup = async () => {
     });
 
     await server.listen();
+
+    server.printUrls();
 };

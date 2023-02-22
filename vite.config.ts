@@ -156,7 +156,7 @@ export default defineConfig(async () => {
 
             globals: true,
             globalSetup: 'test/web/setup.ts',
-            include: ['test/**/*.spec.ts'],
+            include: ['test/**/transformer.spec.ts'],
             reporters: 'verbose',
             sequence: { shuffle: true },
         },

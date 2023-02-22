@@ -28,7 +28,11 @@ export class DOMExtendedElement implements DOM.Element {
     }
 
     get firstElementChild(): Element | null {
-        return (this as any as DOMExtendedElement & Element).get('*') ?? null;
+        return (
+            ((this as any as DOMExtendedElement & Element).get(
+                '*'
+            ) as Element) ?? null
+        );
     }
 
     get localName() {
