@@ -1,10 +1,15 @@
+import { Attr } from 'libxmljs';
 import type { DOM } from '../abstract';
+import { NodeTypes } from '../shared';
+import { DOMExtendedAttr } from './Attr';
 
 /** @package */
 export class XPathResult implements DOM.XPathResult {
     static ORDERED_NODE_SNAPSHOT_TYPE = 6 as const;
 
     static FIRST_ORDERED_NODE_TYPE = 9 as const;
+
+    private results: DOM.Node[];
 
     get singleNodeValue() {
         return this.results[0] ?? null;
@@ -14,7 +19,17 @@ export class XPathResult implements DOM.XPathResult {
         return this.results.length;
     }
 
-    constructor(private results: Node[]) {}
+    constructor(expression: string, results: DOM.Node[]) {
+        const hasAttrExpression = /\/@[^,/ ']+$/.test(expression);
+
+        this.results = hasAttrExpression
+            ? results.map((result) =>
+                  result.nodeType === NodeTypes.ATTRIBUTE_NODE
+                      ? new DOMExtendedAttr(result as Attr)
+                      : result
+              )
+            : results;
+    }
 
     snapshotItem(index: number) {
         return this.results[index];

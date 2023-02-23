@@ -19,7 +19,8 @@ declare module 'libxmljs' {
         namespaces(): Namespace[];
         parent(): Node | null;
         remove(): this;
-        replace(node: Node): unknown;
+        replace(replacement: string): unknown;
+        replace<T extends Node>(replacement: T): unknown;
         text(): string;
         text(value: string): this;
         toString(format?: boolean): string;
@@ -27,8 +28,10 @@ declare module 'libxmljs' {
     }
 
     export class Attr extends Node {
-        value(): string | null;
+        namespace(): Namespace;
+
         value(value: string): this;
+        value(): string | null;
     }
 
     class ParentNode extends Node {

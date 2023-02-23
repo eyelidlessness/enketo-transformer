@@ -20,14 +20,17 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
     xmlns:xsd="http://www.w3.org/2001/XMLSchema"
     xmlns:jr="http://openrosa.org/javarosa"
     xmlns:exsl="http://exslt.org/common"
-    xmlns:str="http://exslt.org/strings"
-    xmlns:dyn="http://exslt.org/dynamic"
-    extension-element-prefixes="exsl str dyn"
+    extension-element-prefixes="exsl"
     version="1.0"
     >
     <xsl:param name="bodyClass"/>
+    <xsl:param name="currentLang"/>
+    <xsl:param name="defaultLang"/>
     <xsl:param name="formTitle"/>
+    <xsl:param name="hasCalculateBindings" />
     <xsl:param name="hasLanguages"/>
+    <xsl:param name="hasPreloadBindings" />
+    <xsl:param name="isTranslated"/>
     <xsl:param name="primaryInstanceId"/>
     <xsl:param name="primaryInstanceName"/>
     <xsl:param name="submissionAction"/>
@@ -45,14 +48,6 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
         name="nodeset-bindings"
         match="/h:html/h:head/xf:model/xf:bind"
         use="@nodeset" />
-    <xsl:key
-        name="preload-bindings"
-        match="/h:html/h:head/xf:model/xf:bind"
-        use="@jr:preload != ''" />
-    <xsl:key
-        name="calculate-bindings"
-        match="/h:html/h:head/xf:model/xf:bind"
-        use="@calculate != ''" />
     <xsl:key name="instances" match="/h:html/h:head/xf:model/xf:instance" use="true()" />
     <xsl:key
         name="model-actions"
@@ -62,10 +57,6 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
         name="fields-by-ref"
         match="/h:html/h:body//xf:input | /h:html/h:body//xf:upload | /h:html/h:body//xf:select | /h:html/h:body//xf:select1"
         use="@ref" />
-    <xsl:key
-        name="default-translation"
-        match="/h:html/h:head/xf:model/xf:itext/xf:translation[@default]"
-        use="true()" />
     <xsl:key
         name="translations"
         match="/h:html/h:head/xf:model/xf:itext/xf:translation"
@@ -80,45 +71,8 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
     <xsl:variable name="undefined">undefined</xsl:variable>
     <xsl:variable name="warning">warning</xsl:variable>
     <xsl:variable name="error">error</xsl:variable>
-    <xsl:variable name="translated"><!-- assumes that either a whole form is translated or nothing (= real life) -->
-        <xsl:if test="count(key('translations', true())) &gt; 1" >
-            <xsl:value-of select="string('true')" /><!-- no time to figure out how to use real boolean values -->
-        </xsl:if>
-    </xsl:variable>
-    <xsl:variable name="default-lang">
-        <xsl:choose>
-            <xsl:when test="key('default-translation', true())/@lang">
-                <xsl:value-of select="key('default-translation', true())/@lang" />
-            </xsl:when>
-            <xsl:otherwise>
-                <xsl:value-of select="''" />
-            </xsl:otherwise>
-        </xsl:choose>
-    </xsl:variable>
-    <xsl:variable name="first-lang">
-        <!-- first language or empty if itext was not used -->
-        <xsl:value-of select="key('translations', true())[1]/@lang" />
-    </xsl:variable>
-    <xsl:variable name="current-lang">
-        <xsl:choose>
-            <xsl:when test="string-length($default-lang) > 0">
-                <xsl:value-of select="$default-lang" />
-            </xsl:when>
-            <xsl:otherwise>
-                <xsl:value-of select="$first-lang" />
-            </xsl:otherwise>
-        </xsl:choose>
-    </xsl:variable>
 
     <xsl:template match="/">
-        <xsl:if test="not(function-available('exsl:node-set'))">
-            <xsl:message terminate="yes">FATAL ERROR: exsl:node-set function is not available in this XSLT processor</xsl:message>
-        </xsl:if>
-        <xsl:for-each select="/h:html/h:head/xf:model/xf:bind">
-            <xsl:if test="not(substring(./@nodeset, 1, 1) = '/')">
-                <xsl:message terminate="no">WARNING: Found binding(s) with relative nodeset attribute <!--on element: <xsl:value-of select="./@nodeset" />--> (form may work correctly if relative nodesets were used consistently throughout xml form in bindings as well as body, otherwise it will certainly be messed up). </xsl:message>
-            </xsl:if>
-        </xsl:for-each>
        <!--> <xsl:text disable-output-escaping='yes'>&lt;!DOCTYPE html&gt;</xsl:text>
         <html>
             <head>
@@ -194,11 +148,11 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                 -->
                     <xsl:if test="$hasLanguages = 'true'" >
                         <select id="form-languages">
-                            <xsl:if test="$translated != 'true'">
+                            <xsl:if test="$isTranslated != 'true'">
                                 <xsl:attribute name="style">display:none;</xsl:attribute>
                             </xsl:if>
                             <xsl:attribute name="data-default-lang">
-                                <xsl:value-of select="$default-lang" />
+                                <xsl:value-of select="$defaultLang" />
                             </xsl:attribute>
                             <xsl:call-template name="languages" />
                         </select>
@@ -207,17 +161,17 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                     <xsl:apply-templates />
 
                     <!-- Create hidden input fields for preload items that do not have a form control. -->
-                    <xsl:if test="key('preload-bindings', true())" >
+                    <xsl:if test="$hasPreloadBindings = 'true'" >
                         <fieldset id="or-preload-items" style="display:none;">
-                            <xsl:apply-templates select="key('preload-bindings', true())"/>
+                            <xsl:apply-templates select="/h:html/h:head/xf:model/xf:bind[@jr:preload != '']"/>
                         </fieldset>
                     </xsl:if>
 
                     <!-- Create hidden input fields for calculated items that do not have a form control. -->
                     <!-- the template will exclude those that have an input field -->
-                    <xsl:if test="key('calculate-bindings', true())">
+                    <xsl:if test="$hasCalculateBindings = 'true'">
                         <fieldset id="or-calculated-items" style="display:none;">
-                            <xsl:apply-templates select="key('calculate-bindings', true())" />
+                            <xsl:apply-templates select="/h:html/h:head/xf:model/xf:bind[@calculate != '']" />
                         </fieldset>
                     </xsl:if>
 
@@ -635,8 +589,8 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
             <!-- better to use default language if defined and otherwise span[1] -->
             <xsl:choose>
                 <!-- TODO: IT WOULD BE MORE EFFICIENT TO EXTRACT THIS FROM exsl:node-set($label_translations) -->
-                <xsl:when test="exsl:node-set($label_translations)/span[@lang=$current-lang]">
-                    <xsl:value-of select="exsl:node-set($label_translations)/span[@lang=$current-lang] " />
+                <xsl:when test="exsl:node-set($label_translations)/span[@lang=$currentLang]">
+                    <xsl:value-of select="exsl:node-set($label_translations)/span[@lang=$currentLang] " />
                 </xsl:when>
                 <xsl:otherwise>
                     <xsl:value-of select="exsl:node-set($label_translations)/span[1] " />
@@ -862,7 +816,7 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                 </xsl:choose>
             </xsl:element>
             <span class="or-option-translations" style="display:none;">
-                <xsl:if test="not(./xf:itemset) and $translated = 'true'">
+                <xsl:if test="not(./xf:itemset) and $isTranslated = 'true'">
                     <xsl:for-each select="exsl:node-set($options)/span">
                         <xsl:copy-of select="." />
                     </xsl:for-each>
@@ -1195,7 +1149,7 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                 <xsl:with-param name="nodeset_u" select="$nodeset_used"/>
             </xsl:call-template>
         </xsl:variable>
-        <xsl:variable name="binding" select="key('nodeset-bindings',$nodeset_used) | key('nodeset-bindings', $nodeset)" />
+        <xsl:variable name="binding" select="key('nodeset-bindings', $nodeset_used) | key('nodeset-bindings', $nodeset)" />
         <xsl:choose>
             <xsl:when test="( local-name() = 'select' or local-name() = 'select1' ) and contains(@appearance, 'minimal') or contains(@appearance, 'autocomplete') or contains(@appearance, 'search')">
                 <xsl:call-template name="select-select">
@@ -1390,7 +1344,7 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
         <xsl:for-each select="key('itext-texts-by-id', $id)">
             <xsl:variable name="lang" select="ancestor::xf:translation/@lang"/>
             <xsl:variable name="active">
-                <xsl:if test="string($lang) = string($current-lang)">active</xsl:if>
+                <xsl:if test="string($lang) = $currentLang">active</xsl:if>
             </xsl:variable>
             <xsl:variable name="notext">
                 <xsl:value-of select="string-length(./xf:value[@form='long' or @form='short' or not(@form)]) = 0" />

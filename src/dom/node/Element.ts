@@ -1,14 +1,29 @@
-import type { Node } from 'libxmljs';
-import { libxmljs } from 'libxslt';
+import { /* Document,  */ Node } from 'libxmljs';
+import { /* libxslt,  */ libxmljs } from 'libxslt';
 import type { DOM } from '../abstract';
 import { NodeTypes } from '../shared';
 
-const { Element, parseXml } = libxmljs;
+const { Element, parseHtmlFragment, parseXml } = libxmljs;
 
 /** @package */
 export interface DOMExtendedElement extends DOM.Node {
     remove(): void;
 }
+
+// const xslParserStylesheet = libxslt.parse(
+//     /* xsl */ `
+//     <?xml version="1.0" encoding="UTF-8"?>
+//         <xsl:stylesheet
+//             xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+//             xmlns:exsl="http://exslt.org/common"
+//             extension-element-prefixes="exsl"
+//             version="1.0">
+//             <xsl:template match="/">
+//                 <xsl:copy />
+//             </xsl:template>
+//         </xsl:stylesheet>
+// `.trim()
+// );
 
 export class DOMExtendedElement implements DOM.Element {
     readonly nodeType = NodeTypes.DOCUMENT_NODE;
@@ -49,6 +64,32 @@ export class DOMExtendedElement implements DOM.Element {
         return (this as any as Element).name();
     }
 
+    get innerHTML() {
+        return (this as any as Element)
+            .toString(false)
+            .replace(/^<^[>]+>/, '')
+            .replace(/<\/^[>]+>(?!\n)$/, '');
+    }
+
+    set innerHTML(html: string) {
+        // let parsed: Document;
+
+        // try {
+        //     parsed = xslParserStylesheet.apply(html, {});
+        // } catch {
+        //     parsed = parseHtmlFragment(`<root>${html}</root>`);
+        // }
+
+        const parsed = parseHtmlFragment(`<root>${html}</root>`);
+        const el = this as any as Element & DOMExtendedElement;
+
+        el.childNodes().forEach((node) => {
+            node.remove();
+        });
+
+        el.append(...parsed.root().childNodes());
+    }
+
     get outerHTML() {
         return (this as any as Element).toString(false);
     }
@@ -80,11 +121,12 @@ export class DOMExtendedElement implements DOM.Element {
     }
 
     replaceWith(this: Element & DOMExtendedElement, ...nodes: Node[]) {
-        nodes.forEach((node) => {
-            this.addPrevSibling(node);
-        });
+        const [node, ...rest] = nodes;
 
-        this.remove();
+        this.replace(node);
+        rest.reverse().forEach((sibling) => {
+            node.addNextSibling(sibling);
+        });
     }
 
     removeAttribute(this: DOMExtendedElement & Element, name: string): void {

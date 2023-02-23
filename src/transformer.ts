@@ -55,10 +55,27 @@ const isFunction = <T extends (...args: any[]) => any>(
     value: unknown
 ): value is T => typeof value === 'function';
 
+const warnForRelativeBindings = (bindings: DOM.Element[]) => {
+    bindings.forEach((binding) => {
+        const nodeset = binding.getAttribute('nodeset');
+
+        if (nodeset != null && !nodeset?.startsWith('/')) {
+            console.warn(
+                `WARNING: Found binding(s) with relative nodeset attribute on binding to nodeset ${nodeset} (form may work correctly if relative nodesets were used consistently throughout xml form in bindings as well as body, otherwise it will certainly be messed up).`
+            );
+        }
+    });
+};
+
 interface XSLTParams {
     bodyClass: string | null | undefined;
+    currentLang: string;
+    defaultLang: string;
     formTitle: string;
+    hasCalculateBindings: boolean;
     hasLanguages: boolean;
+    hasPreloadBindings: boolean;
+    isTranslated: boolean;
     primaryInstanceId: string | null | undefined;
     primaryInstanceName: string | null | undefined;
     submissionAction: string | null | undefined;
@@ -67,42 +84,75 @@ interface XSLTParams {
     openclinica: number | null | undefined;
 }
 
-const getXSLTParams = (survey: Survey, xformDoc: DOM.Document): XSLTParams => {
-    const body = getNodeByXPathExpression(
+const getXSLTParams = (
+    survey: Survey,
+    xformDoc: DOM.Document,
+    bindings: DOM.Element[]
+): XSLTParams => {
+    const translations = getNodesByXPathExpression(
         xformDoc,
-        '/h:html/h:body',
+        '/h:html/h:head/xmlns:model/xmlns:itext/xmlns:translation',
         NAMESPACES
     );
-    const bodyClass = body?.getAttribute('class');
-
+    const defaultLang =
+        translations
+            .find((translation) => translation.hasAttribute('default'))
+            ?.getAttribute('lang') ?? '';
+    const currentLang =
+        defaultLang === ''
+            ? translations[0]?.getAttribute('lang') ?? ''
+            : defaultLang;
     const primaryInstanceRoot = getNodeByXPathExpression(
         xformDoc,
         '/h:html/h:head/xmlns:model/xmlns:instance[1]/*',
         NAMESPACES
     );
-
-    const formTitle =
-        getNodeByXPathExpression(
-            xformDoc,
-            '/h:html/h:head/h:title',
-            NAMESPACES
-        )?.textContent?.trim() ?? 'No Title';
-
     const modelSubmission = getNodeByXPathExpression(
         xformDoc,
         '//xmlns:submission',
         NAMESPACES
     );
+
     let submissionMethod = modelSubmission?.getAttribute('method');
 
     if (submissionMethod === 'form-data-post') {
         submissionMethod = 'post';
     }
 
+    let hasCalculateBindings = false;
+    let hasPreloadBindings = false;
+
+    for (const binding of bindings) {
+        hasCalculateBindings =
+            hasCalculateBindings || binding.hasAttribute('calculate');
+        hasPreloadBindings =
+            hasPreloadBindings || binding.hasAttribute('jr:preload');
+
+        if (hasCalculateBindings && hasPreloadBindings) {
+            break;
+        }
+    }
+
     return {
-        bodyClass,
-        formTitle,
+        bodyClass: getNodeByXPathExpression(
+            xformDoc,
+            '/h:html/h:body',
+            NAMESPACES
+        )?.getAttribute('class'),
+        currentLang,
+        defaultLang,
+        formTitle:
+            getNodeByXPathExpression(
+                xformDoc,
+                '/h:html/h:head/h:title',
+                NAMESPACES
+            )?.textContent?.trim() ?? 'No Title',
+        hasCalculateBindings,
         hasLanguages: getNodeByXPathExpression(xformDoc, '//@lang') != null,
+
+        // TODO `hasAttributeNS`
+        hasPreloadBindings,
+        isTranslated: translations.length > 1,
         openclinica: survey.openclinica ? 1 : undefined,
         primaryInstanceId: primaryInstanceRoot?.getAttribute('id'),
         primaryInstanceName: primaryInstanceRoot?.nodeName.toLowerCase(),
@@ -117,7 +167,7 @@ const getXSLTParams = (survey: Survey, xformDoc: DOM.Document): XSLTParams => {
  * Performs XSLT transformation on XForm and process the result.
  */
 export const transform: Transform = async (survey) => {
-    const { xform, markdown, media, openclinica, theme } = survey;
+    const { xform, markdown, media, theme } = survey;
 
     const mediaMap = Object.fromEntries(
         Object.entries(media || {}).map((entry) => entry.map(escapeURLPath))
@@ -135,11 +185,15 @@ export const transform: Transform = async (survey) => {
         xformDoc = preprocess.call(libxmljs, xformDoc as any);
     }
 
-    const xsltParams = getXSLTParams(survey, xformDoc);
+    const bindings = getNodesByXPathExpression(
+        xformDoc,
+        '/h:html/h:head/xmlns:model/xmlns:bind',
+        NAMESPACES
+    );
 
-    if (openclinica) {
-        xsltParams.openclinica = 1;
-    }
+    warnForRelativeBindings(bindings);
+
+    const xsltParams = getXSLTParams(survey, xformDoc, bindings);
 
     processBinaryDefaults(xformDoc, mediaMap);
     injectItemsetTemplateCalls(xslFormDoc, xformDoc);
@@ -193,9 +247,7 @@ const xslTransform = (
 
     if (xsltParams != null) {
         Object.entries(xsltParams).forEach(([key, value]) => {
-            if (value == null) {
-                xsltProcessor.setParameter(null, key, '');
-            } else {
+            if (value != null) {
                 xsltProcessor.setParameter(null, key, String(value));
             }
         });
@@ -203,6 +255,43 @@ const xslTransform = (
 
     return xsltProcessor.transformToDocument(xmlDoc);
 };
+
+const assertEnvironmentIsSupported = () => {
+    const domParser = new DOMParser();
+    const xslDoc = domParser.parseFromString(
+        /* xsl */ `
+        <?xml version="1.0" encoding="UTF-8"?>
+        <xsl:stylesheet
+            xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+            xmlns:exsl="http://exslt.org/common"
+            extension-element-prefixes="exsl"
+            version="1.0">
+            <xsl:template match="/">
+                <xsl:choose>
+                    <xsl:when test="not(function-available('exsl:node-set'))">
+                        <error>FATAL ERROR: exsl:node-set function is not available in this XSLT processor</error>
+                    </xsl:when>
+                    <xsl:otherwise>
+                        <pass />
+                    </xsl:otherwise>
+                </xsl:choose>
+            </xsl:template>
+        </xsl:stylesheet>
+    `.trim(),
+        'text/xml'
+    );
+    const doc = domParser.parseFromString('<root/>', 'text/xml');
+    const { documentElement } = xslTransform(xslDoc, doc);
+
+    if (documentElement.nodeName === 'error') {
+        throw new Error(
+            documentElement.textContent ??
+                `Unknown error: ${documentElement.outerHTML}`
+        );
+    }
+};
+
+assertEnvironmentIsSupported();
 
 const getNamespaceResolver = (namespaces: Record<string, string>) => ({
     lookupNamespaceURI: (prefix: string) => namespaces[prefix] ?? null,
@@ -556,6 +645,9 @@ const addInstanceIdNodeIfMissing = (doc: DOM.Document) => {
     }
 };
 
+const escapeRegExp = (str: string) =>
+    str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /**
  * Converts a subset of Markdown in all textnode children of labels and hints into HTML
  */
@@ -563,7 +655,7 @@ const renderMarkdown = (
     htmlDoc: DOM.Document,
     mediaMap: Record<string, string>
 ) => {
-    const replacements: Record<string, string> = {};
+    const replacements = new Map<string, string>();
 
     // First turn all outputs into text so *<span class="or-output></span>* can be detected
     getNodesByXPathExpression(
@@ -573,13 +665,21 @@ const renderMarkdown = (
         const key = `---output-${index}`;
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const textNode = el.firstChild!.cloneNode(true);
-        replacements[key] = el.outerHTML;
+        replacements.set(key, el.outerHTML);
         textNode.textContent = key;
         el.replaceWith(textNode);
         // Note that we end up in a situation where we likely have sibling text nodes...
     });
 
     const domParser = new DOMParser();
+    const tempDoc = domParser.parseFromString(
+        `<root class="temporary-root"></root>`,
+        'text/html'
+    );
+
+    correctHTMLDocHierarchy(tempDoc);
+
+    const { documentElement: tempRoot } = tempDoc;
 
     // Now render markdown
     getNodesByXPathExpression(
@@ -601,40 +701,39 @@ const renderMarkdown = (
         let rendered = markdownToHTML(original);
 
         if (original !== rendered) {
-            const tempDoc = domParser.parseFromString(
-                `<root class="temporary-root">${rendered}</root>`,
-                'text/html'
-            );
+            tempRoot.innerHTML = rendered;
 
-            correctHTMLDocHierarchy(tempDoc);
             replaceMediaSources(tempDoc, mediaMap);
 
             rendered = docToString(tempDoc);
             key = `$$$${index}`;
-            replacements[key] = rendered;
+            replacements.set(key, rendered);
             el.textContent = key;
         }
     });
 
-    let htmlStr = docToString(htmlDoc);
+    const find = new RegExp(
+        [...replacements.keys()]
+            .reverse()
+            .map((key) => escapeRegExp(key))
+            .join('|'),
+        'g'
+    );
+    const replace = (match: string) => {
+        const replacement = replacements.get(match);
 
-    // Now replace the placeholders with the rendered HTML
-    // in reverse order so outputs are done last
-    Object.keys(replacements)
-        .reverse()
-        .forEach((key) => {
-            const replacement = replacements[key];
-            if (replacement) {
-                /**
-                 * The replacement is called as a function here so special string
-                 * replacement sequences are preserved if they appear within Markdown.
-                 *  @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replace#specifying_a_string_as_the_replacement}
-                 */
-                htmlStr = htmlStr.replace(key, () => replacement);
-            }
-        });
+        replacements.delete(match);
 
-    return htmlStr;
+        return replacement ?? match;
+    };
+
+    let rendered = docToString(htmlDoc);
+
+    while (replacements.size > 0) {
+        rendered = rendered.replace(find, replace);
+    }
+
+    return rendered;
 };
 
 const docToString = (doc: DOM.Document) => {
@@ -993,7 +1092,9 @@ const correctModelNamespaces = (
         );
 
         missingNamespaceAttrs.forEach(({ name, value }) => {
-            instanceRoot.setAttributeNS(XMLNS_URI, name, value);
+            if (value != null) {
+                instanceRoot.setAttributeNS(XMLNS_URI, name, value);
+            }
         });
     });
 };

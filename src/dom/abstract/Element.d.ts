@@ -12,6 +12,7 @@ export interface Element extends Node {
     readonly firstElementChild: Element | null;
     readonly localName: string;
     readonly nodeName: string;
+    innerHTML: string;
     readonly outerHTML: string;
     append(...nodes: Array<string | Node>): void;
     getAttribute(name: string): string | null;

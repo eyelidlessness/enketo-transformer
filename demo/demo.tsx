@@ -1,6 +1,6 @@
 /* eslint-disable jsx-a11y/label-has-associated-control */
 import { Router, Routes, Route, useSearchParams } from '@solidjs/router';
-import { transform } from 'enketo-transformer/web';
+import { transform, TransformedSurvey } from 'enketo-transformer/web';
 import {
     createEffect,
     createResource,
@@ -116,13 +116,21 @@ function Demo() {
         }
 
         const start = performance.now();
-        const result = await transform({
-            xform: selected,
-            media: logo() ? { 'form_logo.png': '/icon.png' } : {},
-            openclinica: openclinica() ? 1 : 0,
-            markdown: markdown(),
-            theme: theme() ? 'mytheme' : undefined,
-        });
+
+        let result: TransformedSurvey | null = null;
+
+        try {
+            result = await transform({
+                xform: selected,
+                media: logo() ? { 'form_logo.png': '/icon.png' } : {},
+                openclinica: openclinica() ? 1 : 0,
+                markdown: markdown(),
+                theme: theme() ? 'mytheme' : undefined,
+            });
+        } catch (error) {
+            console.error('error', error);
+            setError(error as Error);
+        }
 
         setDuration(performance.now() - start);
 

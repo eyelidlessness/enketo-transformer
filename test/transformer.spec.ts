@@ -38,6 +38,23 @@ function findElementsByName(
     );
 }
 
+const files = [
+    ['advancedRequired', 'advanced-required.xml'],
+    ['autocomplete', 'autocomplete.xml'],
+    ['externalXForm', 'external.xml'],
+    ['external', 'external.xml'],
+    ['formattedOutput', 'formatted-output.xml'],
+    ['itemsetDoc', 'itemset.xml'],
+    ['modelNamespace', 'model-namespace.xml'],
+    ['widgets', 'widgets.xml'],
+] as const;
+
+describe.each(files)(`transforming %s`, (name, form) => {
+    it(`transforms ${name}`, async () => {
+        await getTransformedForm(form);
+    });
+});
+
 describe('transformer', () => {
     let advancedRequired: TransformedSurvey;
     let autocomplete: TransformedSurvey;

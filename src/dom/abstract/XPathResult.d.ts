@@ -1,3 +1,5 @@
+import type { Node } from './Node';
+
 /** @package */
 export interface NamespaceResolver {
     lookupNamespaceURI(prefix: string): string | null;

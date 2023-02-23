@@ -68,7 +68,7 @@ export class DOMExtendedDocument implements DOM.Document {
             ) as (Node & DOM.Node) | null;
             const results = result == null ? [] : [result];
 
-            return new XPathResult(results);
+            return new XPathResult(xpathExpression, results);
         }
 
         const results = (contextNode ?? this).find(
@@ -76,7 +76,7 @@ export class DOMExtendedDocument implements DOM.Document {
             namespaces
         ) as Array<Node & Element & DOM.Node>;
 
-        return new XPathResult(results);
+        return new XPathResult(xpathExpression, results);
     }
 }
 
