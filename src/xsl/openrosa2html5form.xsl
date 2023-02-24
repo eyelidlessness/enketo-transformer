@@ -30,6 +30,7 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
     <xsl:param name="hasCalculateBindings" />
     <xsl:param name="hasLanguages"/>
     <xsl:param name="hasPreloadBindings" />
+    <xsl:param name="hasSubmission" />
     <xsl:param name="isTranslated"/>
     <xsl:param name="primaryInstanceId"/>
     <xsl:param name="primaryInstanceName"/>
@@ -196,7 +197,7 @@ XSLT Stylesheet that transforms OpenRosa style (X)Forms into valid HTMl5 forms
                         <xsl:message>WARNING: Itemset support is experimental. Make sure to test whether they do what you want.</xsl:message>
                     </xsl:if>
                     -->
-                    <xsl:if test="//xf:submission">
+                    <xsl:if test="$hasSubmission = 'true'">
                         <xsl:message>ERROR: Submissions element(s) not supported.</xsl:message>
                     </xsl:if>
                 </form>

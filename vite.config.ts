@@ -139,7 +139,7 @@ export default defineConfig(async () => {
             port: config.port,
         },
         test: {
-            // Vitest uses thread-based concurrency by defualt.
+            // Vitest uses thread-based concurrency by default.
             // While this would significantly improve the speed
             // of test runs, native Node extensions using N-API
             // are often not thread safe. In this case, that
@@ -156,7 +156,7 @@ export default defineConfig(async () => {
 
             globals: true,
             globalSetup: 'test/web/setup.ts',
-            include: ['test/**/transformer.spec.ts'],
+            include: ['test/**/*.spec.ts'],
             reporters: 'verbose',
             sequence: { shuffle: true },
         },

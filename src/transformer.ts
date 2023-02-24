@@ -55,7 +55,13 @@ const isFunction = <T extends (...args: any[]) => any>(
     value: unknown
 ): value is T => typeof value === 'function';
 
-const warnForRelativeBindings = (bindings: DOM.Element[]) => {
+const warnForRelativeBindings = (modelElement: DOM.Element) => {
+    const bindings = getNodesByXPathExpression(
+        modelElement,
+        './xmlns:bind',
+        NAMESPACES
+    );
+
     bindings.forEach((binding) => {
         const nodeset = binding.getAttribute('nodeset');
 
@@ -75,6 +81,7 @@ interface XSLTParams {
     hasCalculateBindings: boolean;
     hasLanguages: boolean;
     hasPreloadBindings: boolean;
+    hasSubmission: boolean;
     isTranslated: boolean;
     primaryInstanceId: string | null | undefined;
     primaryInstanceName: string | null | undefined;
@@ -87,11 +94,11 @@ interface XSLTParams {
 const getXSLTParams = (
     survey: Survey,
     xformDoc: DOM.Document,
-    bindings: DOM.Element[]
+    xformModel: DOM.Element
 ): XSLTParams => {
     const translations = getNodesByXPathExpression(
-        xformDoc,
-        '/h:html/h:head/xmlns:model/xmlns:itext/xmlns:translation',
+        xformModel,
+        './xmlns:itext/xmlns:translation',
         NAMESPACES
     );
     const defaultLang =
@@ -103,34 +110,20 @@ const getXSLTParams = (
             ? translations[0]?.getAttribute('lang') ?? ''
             : defaultLang;
     const primaryInstanceRoot = getNodeByXPathExpression(
-        xformDoc,
-        '/h:html/h:head/xmlns:model/xmlns:instance[1]/*',
+        xformModel,
+        './xmlns:instance[1]/*',
         NAMESPACES
     );
-    const modelSubmission = getNodeByXPathExpression(
+    const submission = getNodeByXPathExpression(
         xformDoc,
         '//xmlns:submission',
         NAMESPACES
     );
 
-    let submissionMethod = modelSubmission?.getAttribute('method');
+    let submissionMethod = submission?.getAttribute('method');
 
     if (submissionMethod === 'form-data-post') {
         submissionMethod = 'post';
-    }
-
-    let hasCalculateBindings = false;
-    let hasPreloadBindings = false;
-
-    for (const binding of bindings) {
-        hasCalculateBindings =
-            hasCalculateBindings || binding.hasAttribute('calculate');
-        hasPreloadBindings =
-            hasPreloadBindings || binding.hasAttribute('jr:preload');
-
-        if (hasCalculateBindings && hasPreloadBindings) {
-            break;
-        }
     }
 
     return {
@@ -147,19 +140,27 @@ const getXSLTParams = (
                 '/h:html/h:head/h:title',
                 NAMESPACES
             )?.textContent?.trim() ?? 'No Title',
-        hasCalculateBindings,
+        hasCalculateBindings:
+            getNodeByXPathExpression(
+                xformModel,
+                './xmlns:bind/@calculate',
+                NAMESPACES
+            ) != null,
         hasLanguages: getNodeByXPathExpression(xformDoc, '//@lang') != null,
-
-        // TODO `hasAttributeNS`
-        hasPreloadBindings,
+        hasPreloadBindings:
+            getNodeByXPathExpression(
+                xformModel,
+                './xmlns:bind/@jr:preload',
+                NAMESPACES
+            ) != null,
+        hasSubmission: submission != null,
         isTranslated: translations.length > 1,
         openclinica: survey.openclinica ? 1 : undefined,
         primaryInstanceId: primaryInstanceRoot?.getAttribute('id'),
         primaryInstanceName: primaryInstanceRoot?.nodeName.toLowerCase(),
-        submissionAction: modelSubmission?.getAttribute('action'),
+        submissionAction: submission?.getAttribute('action'),
         submissionMethod,
-        submissionPublicKey:
-            modelSubmission?.getAttribute('base64RsaPublicKey'),
+        submissionPublicKey: submission?.getAttribute('base64RsaPublicKey'),
     };
 };
 
@@ -167,6 +168,8 @@ const getXSLTParams = (
  * Performs XSLT transformation on XForm and process the result.
  */
 export const transform: Transform = async (survey) => {
+    assertEnvironmentIsSupported();
+
     const { xform, markdown, media, theme } = survey;
 
     const mediaMap = Object.fromEntries(
@@ -185,15 +188,19 @@ export const transform: Transform = async (survey) => {
         xformDoc = preprocess.call(libxmljs, xformDoc as any);
     }
 
-    const bindings = getNodesByXPathExpression(
+    const xformModel = getNodeByXPathExpression(
         xformDoc,
-        '/h:html/h:head/xmlns:model/xmlns:bind',
+        '/h:html/h:head/xmlns:model',
         NAMESPACES
     );
 
-    warnForRelativeBindings(bindings);
+    if (xformModel == null) {
+        throw new Error('XForm model missing');
+    }
 
-    const xsltParams = getXSLTParams(survey, xformDoc, bindings);
+    warnForRelativeBindings(xformModel);
+
+    const xsltParams = getXSLTParams(survey, xformDoc, xformModel);
 
     processBinaryDefaults(xformDoc, mediaMap);
     injectItemsetTemplateCalls(xslFormDoc, xformDoc);
@@ -290,8 +297,6 @@ const assertEnvironmentIsSupported = () => {
         );
     }
 };
-
-assertEnvironmentIsSupported();
 
 const getNamespaceResolver = (namespaces: Record<string, string>) => ({
     lookupNamespaceURI: (prefix: string) => namespaces[prefix] ?? null,
